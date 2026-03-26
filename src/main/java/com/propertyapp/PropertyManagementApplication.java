@@ -6,7 +6,6 @@ import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.License;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
-import io.swagger.v3.oas.annotations.servers.Server;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
@@ -36,11 +35,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 						name = "MIT License",
 						url = "https://opensource.org/licenses/MIT"
 				)
-		),
-		servers = {
-				@Server(url = "http://localhost:8080", description = "Local Server"),
-				@Server(url = "https://api.propertyapp.com", description = "Production")
-		}
+		)
 )
 @SecurityScheme(
 		name = "Bearer Authentication",
@@ -53,12 +48,15 @@ public class PropertyManagementApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(PropertyManagementApplication.class, args);
 
+		String baseUrl = System.getenv("APP_BASE_URL");
+		if (baseUrl == null || baseUrl.isBlank()) baseUrl = "http://localhost:8080";
+
 		System.out.println("\n" +
 				"========================================================\n" +
-				"   🏠 Property Management System - READY\n" +
-				"   📚 Swagger UI: http://localhost:8080/swagger-ui.html\n" +
-				"   📖 API Docs: http://localhost:8080/api-docs\n" +
-				"   💚 Health: http://localhost:8080/actuator/health\n" +
+				"   Property Management System - READY\n" +
+				"   Swagger UI : " + baseUrl + "/swagger-ui.html\n" +
+				"   API Docs   : " + baseUrl + "/api-docs\n" +
+				"   Health     : " + baseUrl + "/actuator/health\n" +
 				"========================================================\n"
 		);
 	}
