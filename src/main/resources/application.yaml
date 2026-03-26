@@ -1,0 +1,199 @@
+spring:
+  application:
+    name: property-management-system
+
+  sql:
+    init:
+      mode: never
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  # Local:    DATABASE_URL=jdbc:postgresql://localhost:5432/propertydb
+  # Supabase: DATABASE_URL=jdbc:postgresql://db.<ref>.supabase.co:5432/postgres?sslmode=require
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/propertydb}
+    username: ${DB_USERNAME:propertyuser}
+    password: ${DB_PASSWORD:propertypass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: ${DB_POOL_MIN:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      # Validate connection on borrow (prevents stale connection errors)
+      connection-test-query: SELECT 1
+
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    # Auto-detect dialect from JDBC URL; hibernate-spatial handles PostGIS types
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+    open-in-view: false
+
+  # ── File Upload ─────────────────────────────────────────────────────────────
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:10MB}
+      file-size-threshold: 2KB
+
+  # ── Mail ────────────────────────────────────────────────────────────────────
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
+  # ── Cache ───────────────────────────────────────────────────────────────────
+  cache:
+    type: simple
+    cache-names:
+      - properties
+      - users
+      - propertyTypes
+      - roles
+
+# ── Twilio ────────────────────────────────────────────────────────────────────
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID:ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
+  auth-token: ${TWILIO_AUTH_TOKEN:your_auth_token}
+  from-number: ${TWILIO_FROM_NUMBER:+1234567890}
+  enabled: ${TWILIO_ENABLED:false}
+
+# ── Server ────────────────────────────────────────────────────────────────────
+# Render sets PORT automatically; local default 8080
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
+    include-exception: false
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.propertyapp: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: INFO
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+  file:
+    name: ${LOG_FILE:logs/application.log}
+    max-size: 10MB
+    max-history: 7
+
+# ── JWT ───────────────────────────────────────────────────────────────────────
+jwt:
+  # Override in production with a strong 512-bit hex key
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5971}
+  expiration: ${JWT_EXPIRATION:86400000}               # 24 h
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 d
+
+# ── Application ───────────────────────────────────────────────────────────────
+app:
+  name: Property Management System
+  version: 1.0.0
+  description: Complete property listing and management platform
+
+  # CORS: for Render set CORS_ALLOWED_ORIGINS=https://your-service.onrender.com
+  # React Native bypasses browser CORS, but listing origins is good practice
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+    allowed-methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+    allowed-headers: "*"
+    exposed-headers: "Authorization,Link,X-Total-Count,X-Correlation-Id"
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+    max-age: 3600
+
+  async:
+    email:
+      core-pool-size: 5
+      max-pool-size: 20
+      queue-capacity: 200
+      keep-alive-seconds: 60
+      thread-name-prefix: email-exec-
+
+  verification:
+    # Set to your Render URL in production via APP_BASE_URL
+    base-url: ${APP_BASE_URL:http://localhost:8080}
+    verify-endpoint: /api/auth/verify-email
+    expiry-hours: 24
+
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+
+  upload:
+    dir: ${UPLOAD_DIR:uploads/}
+    max-file-size: 10485760   # 10 MB
+    allowed-extensions: jpg,jpeg,png,gif,pdf,doc,docx
+
+  pagination:
+    default-page-size: 20
+    max-page-size: 100
+
+  otp:
+    expiry-minutes: 5
+    length: 6
+
+  # Admin user created on first startup if not present in DB
+  admin:
+    email: ${ADMIN_EMAIL:admin@propertyapp.com}
+    password: ${ADMIN_PASSWORD:Admin@123}
+    first-name: Admin
+    last-name: User
+
+# ── Actuator / Health ─────────────────────────────────────────────────────────
+# Render health check polls: GET /actuator/health  →  {"status":"UP"}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: ${HEALTH_DETAILS:always}
+  health:
+    # Exclude mail from health so Render health check passes even when SMTP creds not set
+    mail:
+      enabled: ${HEALTH_MAIL_ENABLED:false}
+    diskspace:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+# Metadata shown at /actuator/info
+info:
+  app:
+    name: Property Management System
+    version: 1.0.0
+    environment: ${SPRING_PROFILES_ACTIVE:local}
+
+# ── Swagger / OpenAPI ─────────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    try-it-out-enabled: true
+  show-actuator: false

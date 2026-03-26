@@ -1,0 +1,59 @@
+# ── Markdown docs ──────────────────────────────────────────────────────────────
+*.md
+
+# ── Build output ───────────────────────────────────────────────────────────────
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ── Maven wrapper jar ──────────────────────────────────────────────────────────
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+mvnw.cmd
+mvnw
+.gitattributes
+
+# ── Spring Tool Suite (STS) ────────────────────────────────────────────────────
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# ── IntelliJ IDEA ──────────────────────────────────────────────────────────────
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# ── NetBeans ───────────────────────────────────────────────────────────────────
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# ── VS Code ────────────────────────────────────────────────────────────────────
+.vscode/
+
+# ── Environment / Secrets ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+src/main/resources/application-local.properties
+src/main/resources/application-prod.properties
+src/main/resources/application-secret*.properties
+
+# ── Logs ───────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── macOS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+scripts/db/local-dump.sql
+scripts/db/*.dump

@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: property-management-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+
+    envVars:
+      # ── Non-sensitive defaults (committed) ────────────────────────────────
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DDL_AUTO
+        value: update
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: CORS_ALLOW_CREDENTIALS
+        value: "false"
+      - key: HEALTH_MAIL_ENABLED
+        value: "false"
+      - key: TWILIO_ENABLED
+        value: "false"
+      - key: LOG_LEVEL_ROOT
+        value: INFO
+      - key: LOG_LEVEL_APP
+        value: INFO
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: DB_POOL_MIN
+        value: "1"
+
+      # ── Secrets: set these in the Render dashboard (not committed) ────────
+      - key: DATABASE_URL
+        sync: false   # jdbc:postgresql://db.<ref>.supabase.co:5432/postgres?sslmode=require
+      - key: DB_USERNAME
+        sync: false   # postgres
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true   # Render auto-generates a secure random value
+      - key: APP_BASE_URL
+        sync: false   # https://your-service.onrender.com  (set after first deploy)
+      - key: ADMIN_EMAIL
+        sync: false   # admin@propertyapp.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
