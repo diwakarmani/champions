@@ -8,15 +8,30 @@ services:
     autoDeploy: true
 
     envVars:
-      # ── All non-secret config committed here ──────────────────────────────
-      # NOTE: render.yaml env vars only apply to Blueprint services.
-      # If you created the service manually, set these in the Render dashboard:
+      # ── MANUAL SERVICE SETUP (if not using Blueprint) ─────────────────────
+      # render.yaml env vars are IGNORED for manually-created services.
+      # You MUST set ALL of the following in Render Dashboard manually:
       #   Dashboard → Service → Environment → Add Environment Variable
+      #
+      # Required env vars for manual service:
+      #   DATABASE_URL = jdbc:postgresql://db.vqafsihxcryolxwysmfp.supabase.co:5432/postgres?sslmode=require
+      #   DB_USERNAME  = postgres
+      #   DB_PASSWORD  = <your supabase password>
+      #   DDL_AUTO     = none
+      #   JWT_SECRET   = <any long random string>
+      #   ADMIN_EMAIL  = <your admin email>
+      #   ADMIN_PASSWORD = <your admin password>
+      #   APP_BASE_URL = https://<your-render-service>.onrender.com
+      #   CORS_ALLOWED_ORIGINS = *
+      #   CORS_ALLOW_CREDENTIALS = false
+      #   HEALTH_MAIL_ENABLED = false
+      #   TWILIO_ENABLED = false
+      # ──────────────────────────────────────────────────────────────────────
 
       - key: SPRING_PROFILES_ACTIVE
         value: prod
       - key: DDL_AUTO
-        value: update
+        value: none
       - key: CORS_ALLOWED_ORIGINS
         value: "*"
       - key: CORS_ALLOW_CREDENTIALS

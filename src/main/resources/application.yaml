@@ -25,7 +25,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${DDL_AUTO:update}
+      ddl-auto: ${DDL_AUTO:none}
     # database-platform = Spring Boot way of setting dialect
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: ${SHOW_SQL:false}
