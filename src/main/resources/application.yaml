@@ -26,12 +26,17 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:update}
-    # Explicit dialect required — without it Hibernate tries to connect at startup
-    # to auto-detect, and crashes if DB is unreachable before the app even starts
+    # database-platform = Spring Boot way of setting dialect
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
+        # Also set dialect directly in hibernate properties.
+        # In Hibernate 6, hibernate-spatial's SpatialTypeContributor calls
+        # requireService(JdbcEnvironment) during metadata building, which
+        # triggers a DB connection attempt to auto-detect dialect.
+        # Setting dialect here explicitly prevents that metadata lookup.
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
         jdbc:
           batch_size: 50
