@@ -87,6 +87,10 @@ twilio:
 # Render sets PORT automatically; local default 8080
 server:
   port: ${PORT:8080}
+  # Trust X-Forwarded-* headers from Render's reverse proxy so springdoc
+  # picks up the correct public host (champions-3qkd.onrender.com) instead
+  # of the internal container address (localhost:PORT).
+  forward-headers-strategy: framework
   error:
     include-message: always
     include-binding-errors: always
@@ -205,4 +209,7 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
     try-it-out-enabled: true
+    # Point Swagger UI directly at the explicit API docs URL so it doesn't
+    # auto-resolve relative to the browser's current origin (localhost)
+    url: /api-docs
   show-actuator: false
