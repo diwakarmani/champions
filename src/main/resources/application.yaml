@@ -26,7 +26,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:update}
-    # Auto-detect dialect from JDBC URL; hibernate-spatial handles PostGIS types
+    # Explicit dialect required — without it Hibernate tries to connect at startup
+    # to auto-detect, and crashes if DB is unreachable before the app even starts
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
