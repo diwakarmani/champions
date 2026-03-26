@@ -33,4 +33,5 @@ ENTRYPOINT ["java", \
   "-XX:MaxRAMPercentage=75.0", \
   "-XX:+UseG1GC", \
   "-Djava.security.egd=file:/dev/./urandom", \
+  "-Djava.net.preferIPv4Stack=true", \
   "-jar", "app.jar"]
