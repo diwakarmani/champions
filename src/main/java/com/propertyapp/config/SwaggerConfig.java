@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -19,7 +20,7 @@ import java.util.List;
  */
 @Configuration
 public class SwaggerConfig {
-    
+
     @Value("${app.version:1.0.0}")
     private String appVersion;
 
@@ -31,14 +32,14 @@ public class SwaggerConfig {
 
     @Bean
     public OpenAPI customOpenAPI() {
-        Server localServer = new Server()
-                .url("http://localhost:" + serverPort)
-                .description("Local development");
-
-        // In production APP_BASE_URL is the Render URL; in local it equals localhost
-        Server productionServer = new Server()
-                .url(appBaseUrl)
-                .description("Live API (Render)");
+        List<Server> servers = new ArrayList<>();
+        servers.add(new Server().url(appBaseUrl).description("API Server"));
+        // Only add localhost entry when running locally (avoids localhost showing in prod Swagger)
+        if (appBaseUrl.contains("localhost")) {
+            servers.add(new Server()
+                    .url("http://localhost:" + serverPort)
+                    .description("Local development"));
+        }
 
         return new OpenAPI()
                 .info(new Info()
@@ -52,7 +53,7 @@ public class SwaggerConfig {
                         .license(new License()
                                 .name("Apache 2.0")
                                 .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
-                .servers(List.of(productionServer, localServer))
+                .servers(servers)
                 .addSecurityItem(new SecurityRequirement()
                         .addList("Bearer Authentication"))
                 .components(new Components()
