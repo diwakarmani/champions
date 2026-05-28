@@ -78,6 +78,13 @@ public class GroupAdminController {
         return ResponseEntity.ok(ApiResponse.success("Members fetched", groupService.getGroupMembers(pageable)));
     }
 
+    @GetMapping("/realtors/search")
+    @Loggable
+    @Operation(summary = "Look up a realtor by email before adding them to the group")
+    public ResponseEntity<ApiResponse<GroupMemberDTO>> lookupRealtor(@RequestParam String email) {
+        return ResponseEntity.ok(ApiResponse.success("Realtor found", groupService.lookupRealtorByEmail(email)));
+    }
+
     @PostMapping("/members")
     @Loggable
     @Operation(summary = "Add a realtor to own group")

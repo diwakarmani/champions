@@ -23,6 +23,9 @@ public interface RealtorGroupService {
     /** List members of own group */
     PageResponse<GroupMemberDTO> getGroupMembers(Pageable pageable);
 
+    /** Look up a realtor by email so the group admin can add them by ID */
+    GroupMemberDTO lookupRealtorByEmail(String email);
+
     /** Add a realtor to own group */
     GroupMemberDTO addMember(AddMemberRequest request);
 

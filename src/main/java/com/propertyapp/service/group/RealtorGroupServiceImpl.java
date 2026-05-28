@@ -159,6 +159,28 @@ public class RealtorGroupServiceImpl implements RealtorGroupService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('REALTOR_GROUP_ADMIN')")
+    public GroupMemberDTO lookupRealtorByEmail(String email) {
+        User user = userRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+        boolean hasRealtorRole = user.getRoles().stream()
+                .anyMatch(r -> Constants.ROLE_REALTOR.equals(r.getName()));
+        if (!hasRealtorRole) {
+            throw new BadRequestException("User with this email does not have REALTOR role");
+        }
+        return GroupMemberDTO.builder()
+                .userId(user.getId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .profileImageUrl(user.getProfileImageUrl())
+                .isActive(user.isActive())
+                .build();
+    }
+
+    @Override
     @Transactional
     @PreAuthorize("hasRole('REALTOR_GROUP_ADMIN')")
     public GroupMemberDTO addMember(AddMemberRequest request) {
