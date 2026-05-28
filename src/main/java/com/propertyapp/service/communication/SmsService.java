@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "twilio.enabled", havingValue = "true", matchIfMissing = false)
 public class SmsService {
     
     private final TwilioConfig twilioConfig;

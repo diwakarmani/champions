@@ -1,0 +1,36 @@
+# ── Stage 1: Native compile ───────────────────────────────────────────────────
+# Uses GraalVM Community 21 (Oracle Linux 8).  Maven is copied in from the
+# official Maven image so we don't have to install it separately.
+FROM ghcr.io/graalvm/native-image-community:21 AS build
+WORKDIR /app
+
+# Bring in Maven (reuse the official image's installation)
+COPY --from=maven:3.9.9-eclipse-temurin-21 /usr/share/maven /usr/share/maven
+ENV PATH="/usr/share/maven/bin:$PATH"
+
+# findutils is required by the Maven wrapper scripts
+RUN microdnf install -y findutils && microdnf clean all
+
+# ── Dependency cache layer ────────────────────────────────────────────────────
+COPY pom.xml .
+RUN mvn -Pnative dependency:go-offline -B -q
+
+# ── AOT + native compile ──────────────────────────────────────────────────────
+# process-aot analyses the Spring context graph and generates reflection config;
+# native:compile (bound to package via extensions=true) runs native-image.
+COPY src ./src
+RUN mvn -Pnative package -DskipTests -B -q
+
+# ── Stage 2: Minimal runtime ──────────────────────────────────────────────────
+# distroless/cc provides only glibc + libstdc++ — no shell, no package manager.
+# The native binary is fully self-contained; no JVM needed.
+FROM gcr.io/distroless/cc-debian12 AS runtime
+WORKDIR /app
+
+COPY --from=build /app/target/property-app .
+
+EXPOSE 8080
+
+# The native binary reads all Spring config from env vars injected by Render.
+# Active profiles: prod (base) + native (Hibernate bytecode=none).
+ENTRYPOINT ["./property-app", "--spring.profiles.active=prod,native"]

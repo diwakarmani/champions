@@ -1,0 +1,12 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        # Disable runtime bytecode enhancement — proxies are generated at
+        # compile time by Spring Boot AOT, so byte-buddy is not needed.
+        bytecode:
+          provider: none
+        # Prevent Hibernate from scanning for entity classes at startup;
+        # the AOT-generated factories already enumerate them explicitly.
+        archive:
+          scanner: org.hibernate.boot.archive.scan.internal.DisabledScanner

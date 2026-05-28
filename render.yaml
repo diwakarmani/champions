@@ -1,8 +1,15 @@
 services:
+  # ══════════════════════════════════════════════════════════════════════════
+  # RUNTIME TOGGLE — change dockerfilePath to switch builds, then push.
+  #   JVM    (current) : dockerfilePath: ./Dockerfile
+  #   Native (GraalVM) : dockerfilePath: ./Dockerfile.native
+  #
+  # Native also needs SPRING_PROFILES_ACTIVE changed to: prod,native
+  # ══════════════════════════════════════════════════════════════════════════
   - type: web
     name: property-management-api
     runtime: docker
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./Dockerfile          # ← swap to ./Dockerfile.native for GraalVM
     dockerContext: .
     healthCheckPath: /actuator/health
     autoDeploy: true
@@ -29,7 +36,7 @@ services:
       # ──────────────────────────────────────────────────────────────────────
 
       - key: SPRING_PROFILES_ACTIVE
-        value: prod
+        value: prod          # change to: prod,native  when using Dockerfile.native
       - key: DDL_AUTO
         value: none
       - key: CORS_ALLOWED_ORIGINS
