@@ -1,0 +1,191 @@
+spring:
+  application:
+    name: property-management-system
+
+  # Local dev runs against a real local Postgres+PostGIS (docker), NOT Supabase.
+  # Start it with:  cd property-db && docker compose up -d   (see DEV_SETUP.md)
+  sql:
+    init:
+      # Runs postgres.sql (PostGIS geo column, interaction/discovery tables)
+      # AFTER Hibernate has created the entity schema (defer flag below).
+      mode: always
+      schema-locations: classpath:postgres.sql
+      continue-on-error: true
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/propertydb}
+    username: ${DB_USERNAME:propertyuser}
+    password: ${DB_PASSWORD:propertypass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
+
+  jpa:
+    hibernate:
+      # Local dev: Hibernate is the schema authority (fast iteration, no drift).
+      ddl-auto: ${DDL_AUTO:update}
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+    # Run spring.sql.init scripts AFTER Hibernate DDL so postgres.sql can
+    # ALTER the entity-created tables.
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+        # See application.yaml — N+1 mitigation (BE-02).
+        default_batch_fetch_size: 25
+    open-in-view: false
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+      file-size-threshold: 2KB
+
+  mail:
+    host: smtp.gmail.com
+    port: 465
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
+  cache:
+    type: simple
+    cache-names:
+      - properties
+      - users
+      - propertyTypes
+      - roles
+
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID:ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
+  auth-token: ${TWILIO_AUTH_TOKEN:your_auth_token}
+  from-number: ${TWILIO_FROM_NUMBER:+1234567890}
+  enabled: false
+
+server:
+  port: 8080
+  forward-headers-strategy: none
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
+    include-exception: false
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+
+logging:
+  level:
+    root: INFO
+    com.propertyapp: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  file:
+    name: logs/application.log
+    max-size: 10MB
+    max-history: 7
+
+jwt:
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5971}
+  expiration: 86400000
+  refresh-expiration: 604800000
+
+app:
+  name: Property Management System
+  version: 1.0.0
+  description: Complete property listing and management platform
+
+  cors:
+    allowed-origins: "*"
+    allowed-methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+    allowed-headers: "*"
+    exposed-headers: "Authorization,Link,X-Total-Count,X-Correlation-Id"
+    allow-credentials: false
+    max-age: 3600
+
+  async:
+    email:
+      core-pool-size: 5
+      max-pool-size: 20
+      queue-capacity: 200
+      keep-alive-seconds: 60
+      thread-name-prefix: email-exec-
+
+  verification:
+    base-url: http://localhost:8080
+    verify-endpoint: /api/auth/verify-email
+    expiry-hours: 24
+
+  base-url: http://localhost:8080
+
+  upload:
+    dir: uploads/
+    max-file-size: 10485760
+    allowed-extensions: jpg,jpeg,png,gif,pdf,doc,docx
+
+  pagination:
+    default-page-size: 20
+    max-page-size: 100
+
+  otp:
+    expiry-minutes: 5
+    length: 6
+
+  admin:
+    email: ${ADMIN_EMAIL:admin@propertyapp.com}
+    password: ${ADMIN_PASSWORD:Admin@123}
+    first-name: Admin
+    last-name: User
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  health:
+    mail:
+      enabled: false
+    diskspace:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Property Management System
+    version: 1.0.0
+    environment: local
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    try-it-out-enabled: true
+    url: /api-docs
+  show-actuator: false

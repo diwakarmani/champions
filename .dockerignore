@@ -1,0 +1,17 @@
+target/
+*.md
+docs/
+property-db/
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+logs/
+.mvn/wrapper/maven-wrapper.jar
+mvnw.cmd
+mvnw
+src/test/
