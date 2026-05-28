@@ -29,6 +29,7 @@ public interface DiscoveryService {
      Page<PropertyCardDTO> viewMore(
             Long userId,
             DiscoveryCategory category,
+            String city,
             Double lat,
             Double lng,
             Pageable pageable

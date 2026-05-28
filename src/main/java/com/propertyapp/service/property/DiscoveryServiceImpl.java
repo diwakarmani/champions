@@ -100,23 +100,10 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
         int limit = 10;
 
-        List<PropertyCardDTO> popular =
-                discoveryRepository
-                        .getHomeCards(0L, "POPULAR", city, limit)
-                        .stream()
-                        .map(this::mapCard)
-                        .toList();
-
-        List<PropertyCardDTO> recommended = List.of();
-
-        if (userId != null) {
-            recommended =
-                    discoveryRepository
-                            .getHomeCards(userId, "RECOMMENDED", null, limit)
-                            .stream()
-                            .map(this::mapCard)
-                            .toList();
-        }
+        List<PropertyCardDTO> popular = fetchHomeCards(0L, "POPULAR", city, limit);
+        List<PropertyCardDTO> recommended = userId != null
+                ? fetchHomeCards(userId, "RECOMMENDED", city, limit)
+                : List.of();
 
         if (recommended.isEmpty()) {
             recommended = popular;
@@ -138,6 +125,20 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 .recommended(recommended)
                 .nearest(nearest)
                 .build();
+    }
+
+    private List<PropertyCardDTO> fetchHomeCards(Long userId, String category, String city, int limit) {
+        List<PropertyCardDTO> results = discoveryRepository
+                .getHomeCards(userId, category, city, limit)
+                .stream().map(this::mapCard).toList();
+
+        if (results.isEmpty()) {
+            results = discoveryRepository
+                    .getLatestActiveCards(city, limit)
+                    .stream().map(this::mapCard).toList();
+        }
+
+        return results;
     }
 
     private PropertyCardDTO mapCard(PropertyCardProjection p) {
@@ -163,20 +164,19 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     public Page<PropertyCardDTO> viewMore(
             Long userId,
             DiscoveryCategory category,
+            String city,
             Double lat,
             Double lng,
             Pageable pageable
     ) {
 
         if (category == DiscoveryCategory.NEAREST) {
-
             List<PropertyCardDTO> list =
                     discoveryRepository
                             .getNearestCards(lat, lng, pageable.getPageSize())
                             .stream()
                             .map(this::mapCard)
                             .toList();
-
             return new PageImpl<>(list, pageable, list.size());
         }
 
@@ -184,8 +184,13 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 discoveryRepository.getViewMore(
                         userId != null ? userId : 0L,
                         category.name(),
+                        city,
                         pageable
                 );
+
+        if (page.isEmpty()) {
+            return discoveryRepository.getLatestActivePageable(city, pageable).map(this::mapCard);
+        }
 
         return page.map(this::mapCard);
     }

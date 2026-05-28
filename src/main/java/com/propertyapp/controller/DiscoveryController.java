@@ -1,6 +1,7 @@
 package com.propertyapp.controller;
 
 import com.propertyapp.dto.common.ApiResponse;
+import com.propertyapp.dto.common.PageResponse;
 import com.propertyapp.dto.property.HomeDiscoveryResponse;
 import com.propertyapp.dto.property.PropertyCardDTO;
 import com.propertyapp.enums.DiscoveryCategory;
@@ -8,7 +9,6 @@ import com.propertyapp.service.property.DiscoveryService;
 import com.propertyapp.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
@@ -68,8 +68,9 @@ public class DiscoveryController {
     }
 
     @GetMapping("/home/view-more")
-    public ResponseEntity<ApiResponse<Page<PropertyCardDTO>>> viewMore(
+    public ResponseEntity<ApiResponse<PageResponse<PropertyCardDTO>>> viewMore(
             @RequestParam DiscoveryCategory category,
+            @RequestParam(required = false) String city,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
             @RequestParam(defaultValue = "0") int page,
@@ -82,13 +83,7 @@ public class DiscoveryController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(
-                        discoveryService.viewMore(
-                                userId,
-                                category,
-                                lat,
-                                lng,
-                                pageable
-                        )
+                        PageResponse.of(discoveryService.viewMore(userId, category, city, lat, lng, pageable))
                 )
         );
     }

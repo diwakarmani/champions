@@ -30,6 +30,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -108,15 +109,14 @@ public class PropertyServiceImpl implements PropertyService {
 
         property.setLocalityRef(locality);
 
-        property.setLatitude(request.getLatitude());
-        property.setLongitude(request.getLongitude());
+        BigDecimal lat = request.getLatitude() != null ? request.getLatitude() : locality.getLatitude();
+        BigDecimal lng = request.getLongitude() != null ? request.getLongitude() : locality.getLongitude();
+        property.setLatitude(lat);
+        property.setLongitude(lng);
 
-        Point point = createPoint(
-                request.getLatitude().doubleValue(),
-                request.getLongitude().doubleValue()
-        );
-
-        property.setLocation(point);
+        if (lat != null && lng != null) {
+            property.setLocation(createPoint(lat.doubleValue(), lng.doubleValue()));
+        }
 
         property.setCity(locality.getCity().getName());
         property.setState(locality.getCity().getState().getName());

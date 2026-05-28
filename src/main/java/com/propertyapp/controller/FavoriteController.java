@@ -17,11 +17,17 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/favorites")
@@ -46,10 +52,25 @@ public class FavoriteController {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<com.propertyapp.entity.property.Property> properties =
-                favoriteRepository.findPropertiesByUserId(userId, pageable);
 
-        Page<PropertyDTO> dtoPage = properties.map(propertyMapper::toDTO);
+        // Step 1: paginated IDs (no collection join — no in-memory pagination)
+        Page<Long> idPage = favoriteRepository.findPropertyIdsByUserId(userId, pageable);
+
+        // Step 2: fetch full entities with images eagerly loaded
+        List<Property> properties = idPage.isEmpty()
+                ? List.of()
+                : favoriteRepository.findByIdsWithImages(idPage.getContent());
+
+        // Restore original sort order from idPage
+        Map<Long, Property> byId = properties.stream()
+                .collect(Collectors.toMap(Property::getId, p -> p));
+        List<PropertyDTO> ordered = idPage.getContent().stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .map(propertyMapper::toDTO)
+                .toList();
+
+        Page<PropertyDTO> dtoPage = new PageImpl<>(ordered, pageable, idPage.getTotalElements());
         return ResponseEntity.ok(ApiResponse.success(PageResponse.of(dtoPage)));
     }
 
