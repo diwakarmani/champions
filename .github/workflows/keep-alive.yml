@@ -1,0 +1,34 @@
+name: Keep Render Alive
+
+# Pings /actuator/health every 13 minutes between 8:30 AM and 10:00 PM IST
+# (03:00–16:00 UTC). Render free tier sleeps after 15 min of inactivity —
+# starting at 03:00 UTC gives a 30-min buffer before peak usage so the
+# service is always warm when the first user opens the app.
+#
+# IST = UTC+5:30
+#   8:30 AM IST = 03:00 UTC
+#  10:00 PM IST = 16:30 UTC
+
+on:
+  schedule:
+    # Every 13 min during UTC hours 3–16  →  8:30 AM – 10:22 PM IST
+    - cron: '0,13,26,39,52 3-16 * * *'
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Ping Render health endpoint
+        run: |
+          echo "Pinging Render at $(date -u '+%Y-%m-%d %H:%M:%S UTC')..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            https://champions-3qkd.onrender.com/actuator/health)
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "✓ Render is UP"
+          else
+            echo "⚠ Render returned status $STATUS (may still be warming up)"
+          fi
