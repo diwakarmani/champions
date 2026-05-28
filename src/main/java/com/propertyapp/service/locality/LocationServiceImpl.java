@@ -3,6 +3,7 @@ package com.propertyapp.service.locality;
 import com.propertyapp.dto.location.CityResponse;
 import com.propertyapp.dto.location.CityResponseDTO;
 import com.propertyapp.dto.location.CreateCityRequestDTO;
+import com.propertyapp.dto.location.LocalityDTO;
 import com.propertyapp.dto.location.StateResponse;
 import com.propertyapp.entity.locality.City;
 import com.propertyapp.entity.locality.Country;
@@ -445,14 +446,20 @@ private void importLocalitiesFromOverpass(City city) {
     }
 
     @Override
-    @Transactional(readOnly=true)
-    public List<Locality> searchLocalities(Long cityId,String keyword) {
-
-        if (keyword.length()<2)
-            throw new BadRequestException("Minimum 2 characters required");
-
-        Pageable pageable = PageRequest.of(0,10);
-        return localityRepo.searchLocalities(cityId,keyword,pageable);
+    @Transactional(readOnly = true)
+    public List<LocalityDTO> searchLocalities(Long cityId, String keyword) {
+        String kw = (keyword == null) ? "" : keyword.trim();
+        Pageable pageable = PageRequest.of(0, kw.isEmpty() ? 200 : 20);
+        return localityRepo.searchLocalities(cityId, kw, pageable)
+                .stream()
+                .map(l -> new LocalityDTO(
+                        l.getId(),
+                        l.getName(),
+                        l.getCity().getId(),
+                        l.getLatitude(),
+                        l.getLongitude()
+                ))
+                .toList();
     }
 
     private void validateLatLng(BigDecimal lat,BigDecimal lng){

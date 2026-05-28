@@ -3,9 +3,9 @@ package com.propertyapp.service.locality;
 import com.propertyapp.dto.location.CityResponse;
 import com.propertyapp.dto.location.CityResponseDTO;
 import com.propertyapp.dto.location.CreateCityRequestDTO;
+import com.propertyapp.dto.location.LocalityDTO;
 import com.propertyapp.dto.location.StateResponse;
 import com.propertyapp.entity.locality.Country;
-import com.propertyapp.entity.locality.Locality;
 import com.propertyapp.entity.locality.State;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,7 +22,7 @@ public interface LocationService {
 
     List<CityResponse> getActiveCities();
 
-    List<Locality> searchLocalities(Long cityId, String keyword);
+    List<LocalityDTO> searchLocalities(Long cityId, String keyword);
 
     void importAllCitiesByCountry(String countryName);
 
