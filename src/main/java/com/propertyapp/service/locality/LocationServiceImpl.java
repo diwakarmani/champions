@@ -429,9 +429,19 @@ private void importLocalitiesFromOverpass(City city) {
     }
 
     @Override
-    @Transactional(readOnly=true)
-    public List<City> getActiveCities() {
-        return cityRepo.findByIsActiveTrue();
+    @Transactional(readOnly = true)
+    public List<CityResponse> getActiveCities() {
+        return cityRepo.findActiveCitiesWithState()
+                .stream()
+                .map(c -> new CityResponse(
+                        c.getId(),
+                        c.getName(),
+                        c.getState().getId(),
+                        c.getState().getName(),
+                        c.getLatitude(),
+                        c.getLongitude()
+                ))
+                .toList();
     }
 
     @Override
