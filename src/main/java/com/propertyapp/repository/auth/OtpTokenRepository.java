@@ -16,12 +16,14 @@ public interface OtpTokenRepository extends JpaRepository<OtpToken, Long> {
     // Find latest OTP for identifier
     Optional<OtpToken> findFirstByIdentifierOrderByCreatedAtDesc(String identifier);
     
-    // Find valid OTP (not verified, not expired)
-    @Query("SELECT o FROM OtpToken o WHERE o.identifier = :identifier " +
-           "AND o.isVerified = false AND o.expiresAt > :now " +
-           "ORDER BY o.createdAt DESC")
-    Optional<OtpToken> findValidOtp(@Param("identifier") String identifier, 
-                                    @Param("now") LocalDateTime now);
+    // Find most recent valid OTP (not verified, not expired) — findFirst adds LIMIT 1
+    Optional<OtpToken> findFirstByIdentifierAndIsVerifiedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
+            String identifier, LocalDateTime now);
+
+    // Expire all pending OTPs for an identifier (called before issuing a new one)
+    @Modifying
+    @Query("UPDATE OtpToken o SET o.expiresAt = :past WHERE o.identifier = :identifier AND o.isVerified = false")
+    int expirePendingOtps(@Param("identifier") String identifier, @Param("past") LocalDateTime past);
     
     // Delete expired OTPs (cleanup)
     @Modifying

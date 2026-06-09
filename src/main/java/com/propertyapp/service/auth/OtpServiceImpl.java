@@ -60,6 +60,9 @@ public class OtpServiceImpl implements OtpService {
         // Generate OTP
         String otpCode = generateOtp();
 
+        // Expire any previous unverified OTPs for this identifier so only one is active
+        otpTokenRepository.expirePendingOtps(identifier, LocalDateTime.now().minusSeconds(1));
+
         // Save OTP token
         OtpToken otpToken = OtpToken.builder()
                 .identifier(identifier)
@@ -101,8 +104,10 @@ public class OtpServiceImpl implements OtpService {
         String identifier = request.getIdentifier().trim();
         String otpCode = request.getOtpCode().trim();
 
-        // Find valid OTP
-        OtpToken otpToken = otpTokenRepository.findValidOtp(identifier, LocalDateTime.now())
+        // Find most recent valid OTP (LIMIT 1 — avoids NonUniqueResultException if duplicates exist)
+        OtpToken otpToken = otpTokenRepository
+                .findFirstByIdentifierAndIsVerifiedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
+                        identifier, LocalDateTime.now())
                 .orElseThrow(() -> new BadRequestException("Invalid or expired OTP"));
 
         // Check if max attempts reached
