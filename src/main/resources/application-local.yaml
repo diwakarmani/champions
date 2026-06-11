@@ -148,6 +148,7 @@ app:
   otp:
     expiry-minutes: 5
     length: 6
+    dev-fixed-code: "123456"
 
   admin:
     email: ${ADMIN_EMAIL:admin@propertyapp.com}

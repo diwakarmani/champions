@@ -18,7 +18,7 @@ public interface StateRepository extends JpaRepository<State, Long> {
 
     boolean existsByOsmId(Long osmId);
 
-    List<State> findByCountryId(Long countryId);
+    List<State> findByCountryIdOrderByNameAsc(Long countryId);
 
 
 

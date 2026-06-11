@@ -220,6 +220,7 @@ public class AuthServiceImpl implements AuthService {
                     .refreshToken(refreshToken)
                     .tokenType("Bearer")
                     .expiresIn(86400L) // 24 hours
+                    .id(user.getId())
                     .email(user.getEmail())
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
@@ -280,13 +281,14 @@ public class AuthServiceImpl implements AuthService {
                     .refreshToken(refreshToken)
                     .tokenType("Bearer")
                     .expiresIn(86400L) // 24 hours
+                    .id(user.getId())
                     .email(user.getEmail())
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
                     .roles(user.getRoles().stream().map(Role::getName).toList())
                     .message("Login successful")
                     .build();
-            
+
         } catch (Exception e) {
             // Increment failed login attempts
             user.incrementFailedLoginAttempts();

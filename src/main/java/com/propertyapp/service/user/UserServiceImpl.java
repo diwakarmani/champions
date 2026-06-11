@@ -101,7 +101,7 @@ public class UserServiceImpl implements UserService {
             user.setPhone(request.getPhone());
         }
         if (request.getDateOfBirth() != null) {
-            user.setDateOfBirth(request.getDateOfBirth());
+            user.setDateOfBirth(request.getDateOfBirth().atStartOfDay());
         }
         if (request.getGender() != null) {
             user.setGender(request.getGender());

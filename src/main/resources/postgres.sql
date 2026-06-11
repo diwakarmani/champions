@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS user_property_interactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_interactions_user ON user_property_interactions(user_id);
-CREATE INDEX idx_interactions_property ON user_property_interactions(property_id);
-CREATE INDEX idx_interactions_created ON user_property_interactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_interactions_user ON user_property_interactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_interactions_property ON user_property_interactions(property_id);
+CREATE INDEX IF NOT EXISTS idx_interactions_created ON user_property_interactions(created_at);
 
 -- Discovery cache (precomputed)
 CREATE TABLE IF NOT EXISTS discovery_cache (
@@ -32,5 +32,5 @@ CREATE TABLE IF NOT EXISTS discovery_cache (
     PRIMARY KEY (user_id, category, property_id, city)
 );
 
-CREATE INDEX idx_discovery_lookup
+CREATE INDEX IF NOT EXISTS idx_discovery_lookup
 ON discovery_cache(user_id, category, city);

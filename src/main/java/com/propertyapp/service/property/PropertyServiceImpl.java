@@ -263,6 +263,14 @@ public class PropertyServiceImpl implements PropertyService {
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PageResponse<PropertyDTO> getAllProperties(Pageable pageable) {
+        Page<Property> properties = propertyRepository.findByDeletedAtIsNull(pageable);
+        return PageResponse.of(properties.map(propertyMapper::toDTO));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PageResponse<PropertyDTO> getPropertiesByStatus(String status, Pageable pageable) {
         log.info("Fetching properties by status: {}", status);
         
@@ -468,6 +476,32 @@ public class PropertyServiceImpl implements PropertyService {
         log.info("Primary image set successfully");
     }
     
+    @Override
+    @Transactional
+    @CacheEvict(value = "properties", key = "#id")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PropertyDTO approveProperty(Long id) {
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+        property.setStatus("ACTIVE");
+        property.setRejectionReason(null);
+        property = propertyRepository.save(property);
+        return propertyMapper.toDTO(property);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "properties", key = "#id")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PropertyDTO rejectProperty(Long id, String reason) {
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+        property.setStatus("REJECTED");
+        property.setRejectionReason(reason);
+        property = propertyRepository.save(property);
+        return propertyMapper.toDTO(property);
+    }
+
     @Override
     @Transactional
     @CacheEvict(value = "properties", key = "#id")

@@ -1,5 +1,6 @@
 package com.propertyapp.controller;
 
+import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.dto.property.PropertyAmenityDTO;
 import com.propertyapp.dto.property.PropertySubTypeDTO;
 import com.propertyapp.dto.property.PropertyTypeDTO;
@@ -23,45 +24,45 @@ public class AdminPropertyConfigController {
 
     @PostMapping("/types")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Create property type", description = "Admin can create property type")
-    public ResponseEntity<?> createType(@RequestBody PropertyTypeDTO dto) {
-        return ResponseEntity.ok(propertyTypeService.createType(dto));
+    @Operation(summary = "Create property type")
+    public ResponseEntity<ApiResponse<PropertyTypeDTO>> createType(@RequestBody PropertyTypeDTO dto) {
+        return ResponseEntity.ok(ApiResponse.success("Type created", propertyTypeService.createType(dto)));
     }
 
     @PutMapping("/types/{id}")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Update property type", description = "Admin can update property type")
-    public ResponseEntity<?> updateType(
+    @Operation(summary = "Update property type")
+    public ResponseEntity<ApiResponse<PropertyTypeDTO>> updateType(
             @PathVariable Long id,
             @RequestBody PropertyTypeDTO dto) {
-        return ResponseEntity.ok(propertyTypeService.updateType(id, dto));
+        return ResponseEntity.ok(ApiResponse.success("Type updated", propertyTypeService.updateType(id, dto)));
     }
 
     @PatchMapping("/types/{id}/order")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Update property type display order", description = "Admin can update property type display order")
-    public ResponseEntity<?> updateDisplayOrder(
+    @Operation(summary = "Update property type display order")
+    public ResponseEntity<ApiResponse<PropertyTypeDTO>> updateDisplayOrder(
             @PathVariable Long id,
             @RequestParam Integer displayOrder) {
-        return ResponseEntity.ok(
-                propertyTypeService.updateDisplayOrder(id, displayOrder));
+        return ResponseEntity.ok(ApiResponse.success("Order updated",
+                propertyTypeService.updateDisplayOrder(id, displayOrder)));
     }
 
     @PostMapping("/sub-types")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Create property sub-type", description = "Admin can create property sub-type")
-    public ResponseEntity<?> createSubType(
+    @Operation(summary = "Create property sub-type")
+    public ResponseEntity<ApiResponse<PropertySubTypeDTO>> createSubType(
             @RequestBody PropertySubTypeDTO dto) {
-        return ResponseEntity.ok(
-                propertyTypeService.createSubType(dto));
+        return ResponseEntity.ok(ApiResponse.success("Sub-type created",
+                propertyTypeService.createSubType(dto)));
     }
 
     @PostMapping("/amenities")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Create property amenities", description = "Admin can create property amenities")
-    public ResponseEntity<?> createAmenity(
+    @Operation(summary = "Create property amenity")
+    public ResponseEntity<ApiResponse<PropertyAmenityDTO>> createAmenity(
             @RequestBody PropertyAmenityDTO dto) {
-        return ResponseEntity.ok(
-                propertyTypeService.createAmenity(dto));
+        return ResponseEntity.ok(ApiResponse.success("Amenity created",
+                propertyTypeService.createAmenity(dto)));
     }
 }

@@ -19,6 +19,8 @@ public interface PropertyService {
     
     PageResponse<PropertyDTO> getMyListings(Pageable pageable);
     
+    PageResponse<PropertyDTO> getAllProperties(Pageable pageable);
+
     PageResponse<PropertyDTO> getPropertiesByStatus(String status, Pageable pageable);
     
     void deleteProperty(Long id);
@@ -35,8 +37,12 @@ public interface PropertyService {
     
     void setPrimaryImage(Long propertyId, Long imageId);
     
+    PropertyDTO approveProperty(Long id);
+
+    PropertyDTO rejectProperty(Long id, String reason);
+
     PropertyDTO toggleFeatured(Long id);
-    
+
     PropertyDTO toggleVerified(Long id);
     
     List<PropertyDTO> getFeaturedProperties(int limit);

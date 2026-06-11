@@ -20,6 +20,7 @@ public interface PropertyMapper {
     @Mapping(target = "ownerName", expression = "java(property.getOwner().getFirstName() + \" \" + property.getOwner().getLastName())")
     @Mapping(target = "ownerEmail", source = "owner.email")
     @Mapping(target = "ownerPhone", source = "owner.phone")
+    @Mapping(target = "ownerIsRealtor", expression = "java(property.getOwner().getRoles().stream().anyMatch(r -> r.getName().equals(\"REALTOR\")))")
     @Mapping(target = "images", source = "images")
     @Mapping(target = "primaryImageUrl", expression = "java(getPrimaryImageUrl(property))")
     @Mapping(target = "amenities", source = "amenities")

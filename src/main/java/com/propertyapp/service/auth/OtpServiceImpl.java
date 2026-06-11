@@ -2,9 +2,11 @@ package com.propertyapp.service.auth;
 
 import com.propertyapp.dto.auth.*;
 import com.propertyapp.entity.auth.OtpToken;
+import com.propertyapp.entity.user.Role;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.exception.*;
 import com.propertyapp.repository.auth.OtpTokenRepository;
+import com.propertyapp.repository.user.RoleRepository;
 import com.propertyapp.repository.user.UserRepository;
 import com.propertyapp.security.CustomUserDetails;
 import com.propertyapp.security.JwtTokenProvider;
@@ -12,11 +14,13 @@ import com.propertyapp.service.communication.EmailService;
 import com.propertyapp.service.communication.SmsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
@@ -26,6 +30,7 @@ public class OtpServiceImpl implements OtpService {
 
     private final OtpTokenRepository otpTokenRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final SmsService smsService;
     private final EmailService emailService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -34,6 +39,9 @@ public class OtpServiceImpl implements OtpService {
             Pattern.compile("^[A-Za-z0-9+_.-]+@(.+)$");
     private static final Pattern MOBILE_PATTERN =
             Pattern.compile("^\\+?[1-9]\\d{1,14}$"); // E.164 format
+
+    @Value("${app.otp.dev-fixed-code:}")
+    private String devFixedCode;
 
     private static final int OTP_LENGTH = 6;
     private static final int OTP_EXPIRY_MINUTES = 10;
@@ -156,11 +164,12 @@ public class OtpServiceImpl implements OtpService {
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresIn(86400L) // 24 hours
-                .userId(user.getId())
+                .id(user.getId())
                 .email(user.getEmail())
                 .mobile(user.getPhone())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .roles(user.getRoles().stream().map(role -> role.getName()).toList())
                 .message("Login successful")
                 .build();
     }
@@ -211,8 +220,12 @@ public class OtpServiceImpl implements OtpService {
     }
 
     private String generateOtp() {
+        if (devFixedCode != null && !devFixedCode.isBlank()) {
+            log.debug("DEV mode: using fixed OTP code '{}'", devFixedCode);
+            return devFixedCode;
+        }
         SecureRandom random = new SecureRandom();
-        int otp = 100000 + random.nextInt(900000); // 6-digit OTP
+        int otp = 100000 + random.nextInt(900000);
         return String.valueOf(otp);
     }
 
@@ -252,6 +265,11 @@ public class OtpServiceImpl implements OtpService {
         }
 
         user.setActive(true);
+        // OTP users have no password — set an unusable placeholder (cannot match any BCrypt hash)
+        user.setPasswordHash("OTP_USER_" + UUID.randomUUID());
+
+        roleRepository.findByName("BUYER").ifPresent(buyerRole ->
+                user.getRoles().add(buyerRole));
 
         return userRepository.save(user);
     }

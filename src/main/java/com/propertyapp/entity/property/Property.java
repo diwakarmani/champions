@@ -20,7 +20,7 @@ import java.util.Set;
     @Index(name = "idx_status", columnList = "status"),
     @Index(name = "idx_listing_type", columnList = "listing_type"),
     @Index(name = "idx_price", columnList = "price"),
-    @Index(name = "idx_deleted_at", columnList = "deleted_at")
+    @Index(name = "idx_properties_deleted_at", columnList = "deleted_at")
 })
 @Getter
 @Setter
@@ -152,6 +152,9 @@ public class Property extends SoftDeletableEntity {
     @Column(name = "is_premium")
     @Builder.Default
     private boolean isPremium = false;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
     
     // Metrics
     @Column(name = "view_count")

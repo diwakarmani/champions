@@ -642,7 +642,7 @@ public void importCities(Long stateId) {
 
     @Transactional(readOnly = true)
     public List<StateResponse> getStates(Long countryId) {
-        return stateRepo.findByCountryId(countryId)
+        return stateRepo.findByCountryIdOrderByNameAsc(countryId)
                 .stream()
                 .map(state -> new StateResponse(
                         state.getId(),

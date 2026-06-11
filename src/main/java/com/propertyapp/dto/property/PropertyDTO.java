@@ -30,6 +30,10 @@ public class PropertyDTO {
     private String ownerName;
     private String ownerEmail;
     private String ownerPhone;
+    private boolean ownerIsRealtor;
+
+    // Admin fields
+    private String rejectionReason;
     
     // Pricing
     private String listingType;

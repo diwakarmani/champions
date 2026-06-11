@@ -18,9 +18,11 @@ public interface PropertyRepository extends JpaRepository<Property, Long>,
         JpaSpecificationExecutor<Property> {
     
     Optional<Property> findByIdAndDeletedAtIsNull(Long id);
-    
+
+    Page<Property> findByDeletedAtIsNull(Pageable pageable);
+
     Page<Property> findByOwnerIdAndDeletedAtIsNull(Long ownerId, Pageable pageable);
-    
+
     Page<Property> findByStatusAndDeletedAtIsNull(String status, Pageable pageable);
     
     @Query("SELECT p FROM Property p WHERE p.deletedAt IS NULL " +

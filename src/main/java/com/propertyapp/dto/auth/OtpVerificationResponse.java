@@ -2,6 +2,7 @@ package com.propertyapp.dto.auth;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
+import java.util.List;
 
 @Data
 @Builder
@@ -16,12 +17,13 @@ public class OtpVerificationResponse {
     private String tokenType;
     private Long expiresIn;
 
-    // User info
-    private Long userId;
+    // User info — `id` aligns with password-login AuthResponse and /users/me
+    private Long id;
     private String email;
     private String mobile;
     private String firstName;
     private String lastName;
+    private List<String> roles;
 
     private String message;
 }
