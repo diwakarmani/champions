@@ -1,6 +1,8 @@
 package com.propertyapp.dto.property;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -13,6 +15,7 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties({"verified", "featured", "premium"})
 public class PropertyDTO {
     
     private Long id;
@@ -70,8 +73,11 @@ public class PropertyDTO {
     
     // Status
     private String status;
+    @JsonProperty("isVerified")
     private boolean isVerified;
+    @JsonProperty("isFeatured")
     private boolean isFeatured;
+    @JsonProperty("isPremium")
     private boolean isPremium;
     
     // Metrics

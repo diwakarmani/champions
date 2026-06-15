@@ -49,6 +49,10 @@ public interface PropertyRepository extends JpaRepository<Property, Long>,
            "AND p.status = :status AND p.deletedAt IS NULL")
     long countByOwnerAndStatus(@Param("ownerId") Long ownerId, @Param("status") String status);
 
+    @Query("SELECT DISTINCT p.city FROM Property p WHERE p.owner.id = :ownerId " +
+           "AND p.status = 'ACTIVE' AND p.deletedAt IS NULL ORDER BY p.city")
+    List<String> findDistinctActiveCitiesByOwnerId(@Param("ownerId") Long ownerId);
+
     @Query("SELECT p FROM Property p WHERE p.owner.id IN :ownerIds " +
            "AND p.status = :status AND p.deletedAt IS NULL")
     Page<Property> findByOwnerIdInAndStatusAndDeletedAtIsNull(

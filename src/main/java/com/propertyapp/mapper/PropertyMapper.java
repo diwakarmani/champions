@@ -20,10 +20,13 @@ public interface PropertyMapper {
     @Mapping(target = "ownerName", expression = "java(property.getOwner().getFirstName() + \" \" + property.getOwner().getLastName())")
     @Mapping(target = "ownerEmail", source = "owner.email")
     @Mapping(target = "ownerPhone", source = "owner.phone")
-    @Mapping(target = "ownerIsRealtor", expression = "java(property.getOwner().getRoles().stream().anyMatch(r -> r.getName().equals(\"REALTOR\")))")
+    @Mapping(target = "ownerIsRealtor", expression = "java(property.getOwner().getRoles().stream().anyMatch(r -> \"REALTOR\".equals(r.getName()) || \"REALTOR_GROUP_ADMIN\".equals(r.getName())))")
     @Mapping(target = "images", source = "images")
     @Mapping(target = "primaryImageUrl", expression = "java(getPrimaryImageUrl(property))")
     @Mapping(target = "amenities", source = "amenities")
+    @Mapping(target = "isVerified", source = "verified")
+    @Mapping(target = "isFeatured", source = "featured")
+    @Mapping(target = "isPremium", source = "premium")
     PropertyDTO toDTO(Property property);
     
     List<PropertyDTO> toDTOList(List<Property> properties);

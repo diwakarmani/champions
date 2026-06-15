@@ -12,6 +12,7 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ErrorResponse {
     
+    @Builder.Default
     private boolean success = false;
     private String message;
     private String error;

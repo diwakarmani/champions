@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/favorites")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('BUYER') and !hasAnyRole('SUPER_ADMIN', 'REALTOR_GROUP_ADMIN', 'REALTOR', 'SELLER')")
 @Tag(name = "Favorites", description = "Save and manage favourite properties")
 @SecurityRequirement(name = "Bearer Authentication")
 public class FavoriteController {

@@ -81,7 +81,7 @@ public class DataInitializer implements CommandLineRunner {
     private void initializeRoles() {
         log.info("Initializing roles...");
 
-        String[] roleNames = {"BUYER", "SELLER", "REALTOR", "SUPER_ADMIN"};
+        String[] roleNames = {"BUYER", "SELLER", "REALTOR", "REALTOR_GROUP_ADMIN", "SUPER_ADMIN"};
         String[] roleDescriptions = {
             "Property buyer - can search and inquire about properties",
             "Property seller - can list and manage properties",

@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.http.auth.AuthenticationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -173,6 +174,25 @@ public class    GlobalExceptionHandler {
                 .correlationId(CorrelationIdUtils.get())
                 .build();
         
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableRequest(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request
+    ) {
+        log.error("Malformed request body: {}", ex.getMessage());
+
+        ErrorResponse error = ErrorResponse.builder()
+                .success(false)
+                .message("Malformed or invalid request body")
+                .error("Bad Request")
+                .status(HttpStatus.BAD_REQUEST.value())
+                .path(request.getRequestURI())
+                .correlationId(CorrelationIdUtils.get())
+                .build();
+
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
     

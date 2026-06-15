@@ -116,5 +116,6 @@ public class PropertyCreateRequest {
     // Amenities
     private Set<Long> amenityIds;
 
+    @NotNull(message = "Locality is required")
     private Long localityId;
 }
