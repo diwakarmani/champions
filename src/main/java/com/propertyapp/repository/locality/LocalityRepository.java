@@ -16,7 +16,7 @@ public interface LocalityRepository extends JpaRepository<Locality, Long> {
         SELECT l FROM Locality l JOIN FETCH l.city c
         WHERE c.id = :cityId
         AND l.isActive = true
-        AND (:keyword = '' OR LOWER(l.name) LIKE LOWER(CONCAT(:keyword,'%')))
+        AND (:keyword = '' OR LOWER(l.name) LIKE LOWER(CONCAT('%',:keyword,'%')))
         ORDER BY l.name ASC
     """)
     List<Locality> searchLocalities(Long cityId, String keyword, Pageable pageable);

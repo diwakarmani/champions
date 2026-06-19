@@ -51,6 +51,18 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PageResponse<UserDTO> getUsersByRole(String role, Pageable pageable) {
+        log.info("Fetching users by role: {}, page: {}", role, pageable.getPageNumber());
+
+        Page<User> users = userRepository.findByRole(role, pageable);
+        Page<UserDTO> userDTOs = users.map(userMapper::toDTO);
+
+        return PageResponse.of(userDTOs);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PageResponse<UserDTO> searchUsers(String search, Pageable pageable) {
         log.info("Searching users with query: {}", search);
         
@@ -173,14 +185,35 @@ public class UserServiceImpl implements UserService {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public void assignRoles(Long userId, Set<String> roleNames) {
         log.info("Assigning roles to user {}: {}", userId, roleNames);
-        
+
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        
+
+        boolean targetIsCurrentAdmin = user.getRoles().stream()
+                .anyMatch(r -> "SUPER_ADMIN".equals(r.getName()));
+        boolean removingAdminRole = !roleNames.contains("SUPER_ADMIN");
+
+        if (targetIsCurrentAdmin && removingAdminRole) {
+            // Prevent stripping SUPER_ADMIN when this is the last admin in the system
+            long adminCount = userRepository.countByRole("SUPER_ADMIN");
+            if (adminCount <= 1) {
+                throw new BadRequestException(
+                        "Cannot remove SUPER_ADMIN role: this is the only admin account in the system. " +
+                        "Assign another admin first.");
+            }
+
+            // Prevent an admin from removing their own SUPER_ADMIN role
+            Long callerId = SecurityUtils.getCurrentUserId().orElse(null);
+            if (userId.equals(callerId)) {
+                throw new BadRequestException(
+                        "You cannot remove the SUPER_ADMIN role from your own account.");
+            }
+        }
+
         Set<Role> roles = roleRepository.findByNameIn(roleNames);
         user.setRoles(roles);
         userRepository.save(user);
-        
+
         log.info("Roles assigned successfully to user: {}", userId);
     }
     

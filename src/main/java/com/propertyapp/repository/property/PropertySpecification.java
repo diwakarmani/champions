@@ -6,7 +6,9 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PropertySpecification {
     
@@ -20,7 +22,8 @@ public class PropertySpecification {
             Integer minBedrooms,
             Integer maxBedrooms,
             String furnishedStatus,
-            String status
+            String status,
+            String localities
     ) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -41,7 +44,18 @@ public class PropertySpecification {
                     state.toLowerCase()
                 ));
             }
-            
+
+            if (localities != null && !localities.isBlank()) {
+                List<String> localityList = Arrays.stream(localities.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toList());
+                if (!localityList.isEmpty()) {
+                    predicates.add(criteriaBuilder.lower(root.get("locality")).in(localityList));
+                }
+            }
+
             if (listingType != null && !listingType.isEmpty()) {
                 predicates.add(criteriaBuilder.equal(root.get("listingType"), listingType));
             }

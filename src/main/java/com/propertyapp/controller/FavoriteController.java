@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/favorites")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('BUYER') and !hasAnyRole('SUPER_ADMIN', 'REALTOR_GROUP_ADMIN', 'REALTOR', 'SELLER')")
+@PreAuthorize("hasRole('BUYER')")
 @Tag(name = "Favorites", description = "Save and manage favourite properties")
 @SecurityRequirement(name = "Bearer Authentication")
 public class FavoriteController {

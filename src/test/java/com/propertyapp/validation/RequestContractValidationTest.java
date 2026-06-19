@@ -16,9 +16,14 @@ class RequestContractValidationTest {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
+    /**
+     * Bug 34 — localityId was @NotNull which broke CreateListingScreen (no locality picker).
+     * It is now optional: omitting it succeeds bean validation; the service falls back to the
+     * free-text city/state/country fields supplied in the request body.
+     */
     @Test
-    void propertyCreateRequiresLocalityBeforeRepositoryAccess() {
-        PropertyCreateRequest request = PropertyCreateRequest.builder()
+    void propertyCreateAllowsNullLocalityIdBeanValidationPasses() {
+        PropertyCreateRequest withoutLocality = PropertyCreateRequest.builder()
                 .title("Title")
                 .description("Description")
                 .propertyTypeId(1L)
@@ -28,13 +33,28 @@ class RequestContractValidationTest {
                 .city("City")
                 .state("State")
                 .country("Country")
+                // localityId intentionally omitted
                 .build();
 
-        assertThat(validator.validate(request))
-                .anySatisfy(v -> {
-                    assertThat(v.getPropertyPath().toString()).isEqualTo("localityId");
-                    assertThat(v.getMessage()).isEqualTo("Locality is required");
-                });
+        // Bean validation must not produce a localityId violation
+        assertThat(validator.validate(withoutLocality))
+                .noneMatch(v -> v.getPropertyPath().toString().equals("localityId"));
+    }
+
+    @Test
+    void propertyCreateStillRequiresCoreFieldsWhenLocalityIsAbsent() {
+        PropertyCreateRequest empty = PropertyCreateRequest.builder().build();
+        var violations = validator.validate(empty);
+
+        assertThat(violations).anySatisfy(v ->
+                assertThat(v.getPropertyPath().toString()).isEqualTo("title"));
+        assertThat(violations).anySatisfy(v ->
+                assertThat(v.getPropertyPath().toString()).isEqualTo("propertyTypeId"));
+        assertThat(violations).anySatisfy(v ->
+                assertThat(v.getPropertyPath().toString()).isEqualTo("price"));
+        // localityId must NOT appear in violations (it is now optional)
+        assertThat(violations).noneMatch(v ->
+                v.getPropertyPath().toString().equals("localityId"));
     }
 
     @Test

@@ -179,6 +179,16 @@ public class PropertySeeder implements CommandLineRunner {
                 double lat = city.getLatitude().doubleValue() + (j - 1.5) * 0.012;
                 double lng = city.getLongitude().doubleValue() + (ci % 3 - 1) * 0.012;
 
+                String ownershipType = "FREEHOLD";
+                String possessionStatus = forRent ? "READY_TO_MOVE" : (seq % 5 == 0 ? "WITHIN_3_MONTHS" : "READY_TO_MOVE");
+                String kitchenType = switch (type.getName()) {
+                    case "Penthouse" -> "MODULAR_KITCHEN";
+                    case "Apartment" -> seq % 3 == 0 ? "OPEN_KITCHEN" : "MODULAR_KITCHEN";
+                    case "Villa"     -> seq % 2 == 0 ? "MODULAR_KITCHEN" : "OPEN_KITCHEN";
+                    default          -> seq % 3 == 0 ? "MODULAR_KITCHEN" : "CLOSED_KITCHEN";
+                };
+                String waterSupply = seq % 3 == 0 ? "CORPORATION_WATER" : "24_7_SUPPLY";
+
                 Property property = Property.builder()
                         .title(beds + " Bed " + type.getName() + " in " + localityName)
                         .description(beds + "-bedroom " + type.getName().toLowerCase()
@@ -204,6 +214,10 @@ public class PropertySeeder implements CommandLineRunner {
                         .carpetArea(550 + beds * 220)
                         .builtUpArea(700 + beds * 250)
                         .furnishedStatus(FURNISHING[seq % 3])
+                        .ownershipType(ownershipType)
+                        .possessionStatus(possessionStatus)
+                        .kitchenType(kitchenType)
+                        .waterSupply(waterSupply)
                         .status("ACTIVE")
                         .publishedAt(LocalDateTime.now().minusDays(seq))
                         .isVerified(j != 1)

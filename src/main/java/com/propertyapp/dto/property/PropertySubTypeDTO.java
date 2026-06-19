@@ -15,5 +15,6 @@ public class PropertySubTypeDTO {
     private String description;
     private Long propertyTypeId;
     private Integer displayOrder;
+    @JsonInclude(JsonInclude.Include.ALWAYS)
     private Boolean isActive;
 }

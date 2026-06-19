@@ -9,7 +9,9 @@ import java.util.Set;
 public interface UserService {
     
     PageResponse<UserDTO> getAllUsers(Pageable pageable);
-    
+
+    PageResponse<UserDTO> getUsersByRole(String role, Pageable pageable);
+
     PageResponse<UserDTO> searchUsers(String search, Pageable pageable);
     
     UserDTO getUserById(Long id);

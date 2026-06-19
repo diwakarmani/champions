@@ -56,6 +56,14 @@ public class OtpServiceImpl implements OtpService {
         String identifier = request.getIdentifier().trim();
         String identifierType = detectIdentifierType(identifier);
 
+        // Reject unknown identifiers — prevents OTP codes from being issued to
+        // non-existent accounts (typo emails would otherwise create shadow BUYER accounts
+        // via verifyOtp → createUserFromOtp).
+        if (userRepository.findByEmailOrPhone(identifier, identifier).isEmpty()) {
+            throw new UnauthorizedException(
+                    "No account found for " + identifier + ". Please register first.");
+        }
+
         // Rate limiting check
         long recentOtps = otpTokenRepository.countRecentOtps(
                 identifier, LocalDateTime.now().minusMinutes(RATE_LIMIT_MINUTES));
@@ -253,19 +261,18 @@ public class OtpServiceImpl implements OtpService {
 
         if ("EMAIL".equals(identifierType)) {
             user.setEmail(identifier);
-            user.setEmailVerified(true); // Auto-verify since OTP verified
+            user.setEmailVerified(true);
             user.setFirstName("User");
             user.setLastName(identifier.split("@")[0]);
         } else if ("MOBILE".equals(identifierType)) {
             user.setPhone(identifier);
-            user.setMobileVerified(true); // Auto-verify since OTP verified
-            user.setEmail(identifier + "@temp.com"); // Temp email
+            user.setMobileVerified(true);
+            user.setEmail(identifier + "@temp.com");
             user.setFirstName("User");
             user.setLastName(identifier.substring(Math.max(0, identifier.length() - 4)));
         }
 
         user.setActive(true);
-        // OTP users have no password — set an unusable placeholder (cannot match any BCrypt hash)
         user.setPasswordHash("OTP_USER_" + UUID.randomUUID());
 
         roleRepository.findByName("BUYER").ifPresent(buyerRole ->

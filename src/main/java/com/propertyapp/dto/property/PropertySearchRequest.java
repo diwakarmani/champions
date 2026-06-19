@@ -19,4 +19,6 @@ public class PropertySearchRequest {
     private Integer minBedrooms;
     private Integer maxBedrooms;
     private String furnishedStatus;
+    /** Comma-separated neighborhood names, e.g. "Willow Glen,Downtown San Jose" */
+    private String localities;
 }

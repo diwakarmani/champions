@@ -33,14 +33,17 @@ public class UserController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "id") String sortBy,
-            @RequestParam(defaultValue = "DESC") String sortDirection
+            @RequestParam(defaultValue = "DESC") String sortDirection,
+            @RequestParam(required = false) String role
     ) {
-        Sort.Direction direction = sortDirection.equalsIgnoreCase("ASC") 
+        Sort.Direction direction = sortDirection.equalsIgnoreCase("ASC")
             ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, Math.min(size, Constants.MAX_PAGE_SIZE), 
+        Pageable pageable = PageRequest.of(page, Math.min(size, Constants.MAX_PAGE_SIZE),
             Sort.by(direction, sortBy));
-        
-        PageResponse<UserDTO> users = userService.getAllUsers(pageable);
+
+        PageResponse<UserDTO> users = (role != null && !role.isBlank())
+            ? userService.getUsersByRole(role, pageable)
+            : userService.getAllUsers(pageable);
         return ResponseEntity.ok(ApiResponse.success(users));
     }
     

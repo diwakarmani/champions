@@ -41,6 +41,7 @@ public class PropertyController {
             @Parameter(description = "Minimum bedrooms") @RequestParam(required = false) Integer minBedrooms,
             @Parameter(description = "Maximum bedrooms") @RequestParam(required = false) Integer maxBedrooms,
             @Parameter(description = "Furnished status") @RequestParam(required = false) String furnishedStatus,
+            @Parameter(description = "Comma-separated neighborhood names") @RequestParam(required = false) String localities,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
@@ -56,6 +57,7 @@ public class PropertyController {
                 .minBedrooms(minBedrooms)
                 .maxBedrooms(maxBedrooms)
                 .furnishedStatus(furnishedStatus)
+                .localities(localities)
                 .build();
         
         Sort.Direction direction = sortDirection.equalsIgnoreCase("ASC") 

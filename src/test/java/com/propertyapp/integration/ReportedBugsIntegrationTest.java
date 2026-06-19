@@ -277,35 +277,56 @@ class ReportedBugsIntegrationTest {
                 .andExpect(jsonPath("$.data[*].name", not(hasItem(typeName))));
     }
 
+    /**
+     * Bug 34 — localityId was previously @NotNull, preventing CreateListingScreen (which has
+     * no locality picker) from ever submitting. It is now optional:
+     *   - When supplied   → locality entity is resolved; city/state/country are overwritten with
+     *                       the canonical values from the locality (the old behaviour, preserved).
+     *   - When omitted    → free-text address fields from the request body are used; the property
+     *                       is created successfully in DRAFT status (the new behaviour).
+     * Buyer is still forbidden from creating properties regardless of localityId.
+     */
     @Test
-    void propertyCreateValidatesLocalityPersistsCanonicalAddressAndRejectsBuyer() throws Exception {
+    void propertyCreateWithLocalityPersistsCanonicalAddressAndWithoutLocalityUsesFreetextAddress() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        long countBeforeRejectedRequests = propertyRepository.count();
 
-        mockMvc.perform(post("/api/properties")
-                        .header("Authorization", bearer(sellerToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(propertyPayload(typeId, null, "Missing locality")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors[*]", hasItem("localityId: Locality is required")));
-
+        // Buyer forbidden even with a valid localityId
+        long countBefore = propertyRepository.count();
         mockMvc.perform(post("/api/properties")
                         .header("Authorization", bearer(buyerToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(propertyPayload(typeId, localityId, "Buyer forbidden")))
                 .andExpect(status().isForbidden());
-        assertThat(propertyRepository.count()).isEqualTo(countBeforeRejectedRequests);
+        assertThat(propertyRepository.count()).isEqualTo(countBefore);
 
+        // GET on non-existent property returns 404
         mockMvc.perform(get("/api/properties/{id}", 999_999_999L))
                 .andExpect(status().isNotFound());
 
-        JsonNode created = createProperty(typeId, localityId, "Seller persisted");
-        Property stored = propertyRepository.findById(created.at("/data/id").asLong()).orElseThrow();
-        assertThat(stored.getStatus()).isEqualTo("DRAFT");
-        assertThat(stored.getLocalityRef().getId()).isEqualTo(localityId);
-        assertThat(stored.getCity()).isEqualTo(created.at("/data/city").asText());
-        assertThat(stored.getCity()).isNotEqualTo("Client supplied city");
+        // WITH localityId — canonical address overwrites free-text city/state/country
+        JsonNode withLocality = createProperty(typeId, localityId, "With locality");
+        Property storedWithLocality = propertyRepository.findById(withLocality.at("/data/id").asLong()).orElseThrow();
+        assertThat(storedWithLocality.getStatus()).isEqualTo("DRAFT");
+        assertThat(storedWithLocality.getLocalityRef().getId()).isEqualTo(localityId);
+        assertThat(storedWithLocality.getCity()).isEqualTo(withLocality.at("/data/city").asText());
+        // Locality canonical name must replace the "Client supplied city" sent in the body
+        assertThat(storedWithLocality.getCity()).isNotEqualTo("Client supplied city");
+
+        // WITHOUT localityId — free-text address is accepted; property created in DRAFT
+        MvcResult noLocalityResult = mockMvc.perform(post("/api/properties")
+                        .header("Authorization", bearer(sellerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(propertyPayload(typeId, null, "Without locality")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andReturn();
+        Property storedWithoutLocality = propertyRepository.findById(
+                objectMapper.readTree(noLocalityResult.getResponse().getContentAsString())
+                        .at("/data/id").asLong()).orElseThrow();
+        assertThat(storedWithoutLocality.getLocalityRef()).isNull();
+        // Free-text city from the payload must be preserved
+        assertThat(storedWithoutLocality.getCity()).isEqualTo("Client supplied city");
     }
 
     @Test
@@ -432,6 +453,101 @@ class ReportedBugsIntegrationTest {
         )).isFalse();
     }
 
+    /**
+     * Bug 26 — PUT /api/users/me must persist all editable fields and the updated
+     * values must be immediately visible on the subsequent GET /api/users/me call.
+     *
+     * This is the server-side contract for the frontend's
+     * onSubmit → UserService.updateMe() → dispatch(fetchUser()) flow.
+     * Validation edge-cases (invalid DOB, phone too long) are covered by the
+     * existing profileDateAcceptsIsoDatePersistsMidnightAndRejectsDateTime test.
+     */
+    @Test
+    void editProfilePutPersistsAllFieldsAndGetReflectsChangesImmediately() throws Exception {
+        String updateJson = """
+                {
+                  "firstName": "UpdatedBuyer",
+                  "lastName":  "TestLast",
+                  "bio":       "Integration test bio",
+                  "occupation":"QA Engineer",
+                  "gender":    "MALE",
+                  "dateOfBirth":"1995-06-15"
+                }
+                """;
+
+        mockMvc.perform(put("/api/users/me")
+                        .header("Authorization", bearer(buyerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        // dispatch(fetchUser()) performs GET /api/users/me — must return the new values
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", bearer(buyerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.firstName").value("UpdatedBuyer"))
+                .andExpect(jsonPath("$.data.lastName").value("TestLast"))
+                .andExpect(jsonPath("$.data.bio").value("Integration test bio"))
+                .andExpect(jsonPath("$.data.occupation").value("QA Engineer"))
+                .andExpect(jsonPath("$.data.gender").value("MALE"));
+
+        // Unauthenticated PUT must be rejected
+        mockMvc.perform(put("/api/users/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateJson))
+                .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Bug 38 — GET /api/users?role=BUYER must delegate filtering to the database
+     * (via UserRepository.findByRole) and return only users that hold the given role.
+     * Without a role param the endpoint returns all users (original behaviour, preserved).
+     */
+    @Test
+    void getUsersWithRoleFilterReturnOnlyMatchingRoleUsers() throws Exception {
+        // Unauthenticated request must be rejected
+        mockMvc.perform(get("/api/users"))
+                .andExpect(status().isForbidden());
+
+        // Without role param — at least admin + buyer + seller + realtor are seeded
+        mockMvc.perform(get("/api/users")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.totalElements").value(
+                        org.hamcrest.Matchers.greaterThanOrEqualTo(4)));
+
+        // With role=BUYER — every returned user must have BUYER in their roles
+        mockMvc.perform(get("/api/users")
+                        .param("role", "BUYER")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                // At least the seeded buyer exists
+                .andExpect(jsonPath("$.data.totalElements").value(
+                        org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+                // All returned users must carry the BUYER role
+                .andExpect(jsonPath("$.data.content[*].roles[*]",
+                        hasItem("BUYER")));
+
+        // With role=REALTOR — only realtor is seeded; SUPER_ADMIN or BUYER must NOT appear
+        mockMvc.perform(get("/api/users")
+                        .param("role", "REALTOR")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(
+                        org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.data.content[*].roles[*]",
+                        hasItem("REALTOR")));
+
+        // Non-admin must be forbidden even with role param
+        mockMvc.perform(get("/api/users")
+                        .param("role", "BUYER")
+                        .header("Authorization", bearer(buyerToken)))
+                .andExpect(status().isForbidden());
+    }
+
     private JsonNode createProperty(long typeId, long localityId, String title) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/properties")
                         .header("Authorization", bearer(sellerToken))
@@ -465,6 +581,42 @@ class ReportedBugsIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/accessToken").asText();
+    }
+
+    @Test
+    void postingInquiryIncrementsPropertyInquiryCountVisibleOnMyListings() throws Exception {
+        long typeId = propertyTypeRepository.findAll().getFirst().getId();
+        long localityId = localityRepository.findAll().getFirst().getId();
+        JsonNode property = createProperty(typeId, localityId, "InquiryCount target");
+        long propertyId = property.at("/data/id").asLong();
+
+        // Before any inquiry — inquiryCount must be 0
+        com.propertyapp.entity.property.Property saved =
+                propertyRepository.findById(propertyId).orElseThrow();
+        assertThat(saved.getInquiryCount()).isEqualTo(0);
+
+        // Buyer submits an inquiry
+        mockMvc.perform(post("/api/inquiries")
+                        .header("Authorization", bearer(buyerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyId":%d,"name":"Buyer","email":"buyer@propertyapp.com","message":"Interested!"}
+                                """.formatted(propertyId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("NEW"));
+
+        // DB counter incremented
+        com.propertyapp.entity.property.Property afterInquiry =
+                propertyRepository.findById(propertyId).orElseThrow();
+        assertThat(afterInquiry.getInquiryCount()).isEqualTo(1);
+
+        // Seller sees inquiryCount = 1 on GET /api/properties/my-listings
+        mockMvc.perform(get("/api/properties/my-listings")
+                        .header("Authorization", bearer(sellerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                        "$.data.content[?(@.id == %d)].inquiryCount".formatted(propertyId),
+                        hasItem(1)));
     }
 
     private String bearer(String token) {

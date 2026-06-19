@@ -112,10 +112,25 @@ public class PropertyCreateRequest {
     private Integer ageOfProperty;
     
     private LocalDateTime availableFrom;
-    
+
+    @Pattern(regexp = "FREEHOLD|LEASEHOLD|CO_OPERATIVE_SOCIETY|POWER_OF_ATTORNEY",
+             message = "Invalid ownership type")
+    private String ownershipType;
+
+    @Pattern(regexp = "READY_TO_MOVE|WITHIN_15_DAYS|WITHIN_1_MONTH|WITHIN_3_MONTHS|WITHIN_6_MONTHS|WITHIN_1_YEAR|UNDER_CONSTRUCTION",
+             message = "Invalid possession status")
+    private String possessionStatus;
+
+    @Pattern(regexp = "MODULAR_KITCHEN|OPEN_KITCHEN|CLOSED_KITCHEN|NO_KITCHEN",
+             message = "Invalid kitchen type")
+    private String kitchenType;
+
+    @Pattern(regexp = "CORPORATION_WATER|BOREWELL|BOTH|24_7_SUPPLY|TANKER",
+             message = "Invalid water supply type")
+    private String waterSupply;
+
     // Amenities
     private Set<Long> amenityIds;
 
-    @NotNull(message = "Locality is required")
     private Long localityId;
 }

@@ -128,9 +128,21 @@ public class Property extends SoftDeletableEntity {
     
     @Column(name = "age_of_property")
     private Integer ageOfProperty;
-    
+
     @Column(name = "available_from")
     private LocalDateTime availableFrom;
+
+    @Column(name = "ownership_type", length = 30)
+    private String ownershipType; // FREEHOLD, LEASEHOLD, CO_OPERATIVE_SOCIETY, POWER_OF_ATTORNEY
+
+    @Column(name = "possession_status", length = 30)
+    private String possessionStatus; // READY_TO_MOVE, WITHIN_15_DAYS, WITHIN_1_MONTH, WITHIN_3_MONTHS, WITHIN_6_MONTHS, WITHIN_1_YEAR, UNDER_CONSTRUCTION
+
+    @Column(name = "kitchen_type", length = 20)
+    private String kitchenType; // MODULAR_KITCHEN, OPEN_KITCHEN, CLOSED_KITCHEN, NO_KITCHEN
+
+    @Column(name = "water_supply", length = 20)
+    private String waterSupply; // CORPORATION_WATER, BOREWELL, BOTH, 24_7_SUPPLY, TANKER
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "locality_id")

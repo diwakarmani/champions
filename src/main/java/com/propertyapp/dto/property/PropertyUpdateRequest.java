@@ -71,7 +71,12 @@ public class PropertyUpdateRequest {
     private Integer parkingOpen;
     
     private LocalDateTime availableFrom;
-    
+
+    private String ownershipType;
+    private String possessionStatus;
+    private String kitchenType;
+    private String waterSupply;
+
     private Set<Long> amenityIds;
 
     @DecimalMin(value = "-90.0")

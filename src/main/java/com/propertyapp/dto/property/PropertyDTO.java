@@ -70,7 +70,11 @@ public class PropertyDTO {
     private Integer parkingOpen;
     private Integer ageOfProperty;
     private LocalDateTime availableFrom;
-    
+    private String ownershipType;
+    private String possessionStatus;
+    private String kitchenType;
+    private String waterSupply;
+
     // Status
     private String status;
     @JsonProperty("isVerified")

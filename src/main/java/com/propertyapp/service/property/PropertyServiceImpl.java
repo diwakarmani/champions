@@ -90,13 +90,6 @@ public class PropertyServiceImpl implements PropertyService {
             }
         }
 
-        Locality locality = localityRepository.findById(request.getLocalityId())
-                .orElseThrow(() -> new ResourceNotFoundException("Locality", "id", request.getLocalityId()));
-
-        if (!locality.getIsActive()) {
-            throw new BadRequestException("Selected locality is not active");
-        }
-
         Property property = propertyMapper.toEntity(request);
 
         property.setOwner(owner);
@@ -107,21 +100,39 @@ public class PropertyServiceImpl implements PropertyService {
         property.setViewCount(0);
         property.setInquiryCount(0);
 
-        property.setLocalityRef(locality);
+        if (request.getLocalityId() != null) {
+            Locality locality = localityRepository.findById(request.getLocalityId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Locality", "id", request.getLocalityId()));
 
-        BigDecimal lat = request.getLatitude() != null ? request.getLatitude() : locality.getLatitude();
-        BigDecimal lng = request.getLongitude() != null ? request.getLongitude() : locality.getLongitude();
-        property.setLatitude(lat);
-        property.setLongitude(lng);
+            if (!locality.getIsActive()) {
+                throw new BadRequestException("Selected locality is not active");
+            }
 
-        if (lat != null && lng != null) {
-            property.setLocation(createPoint(lat.doubleValue(), lng.doubleValue()));
+            property.setLocalityRef(locality);
+
+            BigDecimal lat = request.getLatitude() != null ? request.getLatitude() : locality.getLatitude();
+            BigDecimal lng = request.getLongitude() != null ? request.getLongitude() : locality.getLongitude();
+            property.setLatitude(lat);
+            property.setLongitude(lng);
+
+            if (lat != null && lng != null) {
+                property.setLocation(createPoint(lat.doubleValue(), lng.doubleValue()));
+            }
+
+            property.setCity(locality.getCity().getName());
+            property.setState(locality.getCity().getState().getName());
+            property.setCountry(locality.getCity().getState().getCountry().getName());
+            property.setLocality(locality.getName());
+        } else {
+            if (request.getLatitude() != null && request.getLongitude() != null) {
+                property.setLatitude(request.getLatitude());
+                property.setLongitude(request.getLongitude());
+                property.setLocation(createPoint(
+                        request.getLatitude().doubleValue(),
+                        request.getLongitude().doubleValue()
+                ));
+            }
         }
-
-        property.setCity(locality.getCity().getName());
-        property.setState(locality.getCity().getState().getName());
-        property.setCountry(locality.getCity().getState().getCountry().getName());
-        property.setLocality(locality.getName());
 
         if (request.getAmenityIds() != null && !request.getAmenityIds().isEmpty()) {
             Set<PropertyAmenity> amenities =
@@ -170,6 +181,10 @@ public class PropertyServiceImpl implements PropertyService {
         if (request.getAvailableFrom() != null) property.setAvailableFrom(request.getAvailableFrom());
         if (request.getAddressLine1() != null) property.setAddressLine1(request.getAddressLine1());
         if (request.getPostalCode() != null) property.setPostalCode(request.getPostalCode());
+        if (request.getOwnershipType() != null) property.setOwnershipType(request.getOwnershipType());
+        if (request.getPossessionStatus() != null) property.setPossessionStatus(request.getPossessionStatus());
+        if (request.getKitchenType() != null) property.setKitchenType(request.getKitchenType());
+        if (request.getWaterSupply() != null) property.setWaterSupply(request.getWaterSupply());
 
         if (request.getLocalityId() != null) {
 
@@ -237,7 +252,8 @@ public class PropertyServiceImpl implements PropertyService {
                 request.getMinBedrooms(),
                 request.getMaxBedrooms(),
                 request.getFurnishedStatus(),
-                "ACTIVE" // Only show active properties in public search
+                "ACTIVE", // Only show active properties in public search
+                request.getLocalities()
         );
         
         Page<Property> properties = propertyRepository.findAll(spec, pageable);
