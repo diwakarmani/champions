@@ -19,7 +19,8 @@ public class CacheConfig {
             "properties",
             "users",
             "propertyTypes",
-            "roles"
+            "roles",
+            "compareResults"
         );
         // Expire 60 s after write — ensures DB edits are visible within 1 refresh cycle
         // even when the update bypasses the service layer (direct SQL / admin tools).

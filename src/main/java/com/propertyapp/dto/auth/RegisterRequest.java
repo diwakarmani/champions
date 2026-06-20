@@ -27,7 +27,8 @@ public class RegisterRequest {
     @Size(max = 50)
     private String lastName;
     
-    @Pattern(regexp = "^[+]?[(]?[0-9]{1,4}[)]?[-\\s.]?[(]?[0-9]{1,4}[)]?[-\\s.]?[0-9]{1,9}$", 
+    @NotBlank(message = "Phone number is required")
+    @Pattern(regexp = "^[+]?[(]?[0-9]{1,4}[)]?[-\\s.]?[(]?[0-9]{1,4}[)]?[-\\s.]?[0-9]{1,9}$",
              message = "Invalid phone number")
     private String phone;
     

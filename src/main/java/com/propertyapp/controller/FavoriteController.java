@@ -2,10 +2,12 @@ package com.propertyapp.controller;
 
 import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.dto.common.PageResponse;
+import com.propertyapp.dto.property.PropertyCompareDTO;
 import com.propertyapp.dto.property.PropertyDTO;
 import com.propertyapp.entity.property.Property;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.entity.user.UserFavorite;
+import com.propertyapp.exception.BadRequestException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.mapper.PropertyMapper;
 import com.propertyapp.repository.property.PropertyRepository;
@@ -109,6 +111,48 @@ public class FavoriteController {
 
         favoriteRepository.deleteByUserIdAndPropertyId(userId, propertyId);
         return ResponseEntity.ok(ApiResponse.success("Removed from favorites", null));
+    }
+
+    @GetMapping("/compare")
+    @Transactional(readOnly = true)
+    @Operation(summary = "Compare 2–3 favorited properties side-by-side")
+    public ResponseEntity<ApiResponse<List<PropertyCompareDTO>>> compareProperties(
+            @RequestParam List<Long> ids
+    ) {
+        if (ids == null || ids.size() < 2) {
+            throw new BadRequestException("Select at least 2 properties to compare.");
+        }
+        if (ids.size() > 3) {
+            throw new BadRequestException("Cannot compare more than 3 properties at once.");
+        }
+
+        // Deduplicate while preserving order
+        List<Long> uniqueIds = ids.stream().distinct().collect(Collectors.toList());
+        if (uniqueIds.size() != ids.size()) {
+            throw new BadRequestException("Duplicate property IDs are not allowed.");
+        }
+
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Single-query ownership check — all IDs must be in the user's favorites
+        long ownedCount = favoriteRepository.countByUserIdAndPropertyIdIn(userId, uniqueIds);
+        if (ownedCount < uniqueIds.size()) {
+            throw new BadRequestException("One or more selected properties are not in your favorites.");
+        }
+
+        List<Property> properties = favoriteRepository.findByIdsWithImagesAndAmenities(uniqueIds);
+
+        // Restore request order
+        Map<Long, Property> byId = properties.stream()
+                .collect(Collectors.toMap(Property::getId, p -> p));
+        List<PropertyCompareDTO> result = uniqueIds.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .map(propertyMapper::toCompareDTO)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success("Properties fetched for comparison", result));
     }
 
     @GetMapping("/{propertyId}/check")

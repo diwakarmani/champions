@@ -4,7 +4,9 @@ import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.dto.common.PageResponse;
 import com.propertyapp.dto.property.*;
 import com.propertyapp.service.property.PropertyService;
+import com.propertyapp.exception.UnauthorizedException;
 import com.propertyapp.util.Constants;
+import com.propertyapp.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -16,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -106,6 +109,14 @@ public class PropertyController {
         return ResponseEntity.ok(ApiResponse.success("Property deleted successfully", null));
     }
     
+    @PostMapping("/{id}/request-deletion")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Request property deletion", description = "Owner submits a deletion request; admin must approve before property becomes inactive")
+    public ResponseEntity<ApiResponse<PropertyDTO>> requestDeletion(@PathVariable Long id) {
+        PropertyDTO property = propertyService.requestDeletion(id);
+        return ResponseEntity.ok(ApiResponse.success("Deletion request submitted. Awaiting admin approval.", property));
+    }
+
     @PatchMapping("/{id}/publish")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Publish property", description = "Owner can publish draft property")
@@ -224,5 +235,17 @@ public class PropertyController {
     ) {
         propertyService.setPrimaryImage(propertyId, imageId);
         return ResponseEntity.ok(ApiResponse.success("Primary image set successfully", null));
+    }
+
+    @PostMapping("/{id}/reveal-contact")
+    @PreAuthorize("hasRole('BUYER')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Reveal owner contact details (BUYER only)",
+               description = "BUYER can reveal masked contact info; increments contactCount and notifies owner on first reveal")
+    public ResponseEntity<ApiResponse<ContactRevealResponse>> revealContact(@PathVariable Long id) {
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("Authentication required"));
+        ContactRevealResponse response = propertyService.revealContact(id, userId);
+        return ResponseEntity.ok(ApiResponse.success("Contact revealed", response));
     }
 }

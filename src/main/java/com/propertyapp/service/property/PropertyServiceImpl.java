@@ -2,17 +2,24 @@ package com.propertyapp.service.property;
 
 import com.propertyapp.dto.common.PageResponse;
 import com.propertyapp.dto.property.*;
+import com.propertyapp.entity.inquiry.Inquiry;
+import com.propertyapp.entity.inquiry.InquiryStatus;
 import com.propertyapp.entity.locality.Locality;
 import com.propertyapp.entity.property.*;
+import com.propertyapp.entity.property.PropertyContactEvent;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.exception.BadRequestException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.exception.UnauthorizedException;
 import com.propertyapp.mapper.PropertyMapper;
+import com.propertyapp.repository.inquiry.InquiryRepository;
 import com.propertyapp.repository.locality.LocalityRepository;
 import com.propertyapp.repository.property.*;
 import com.propertyapp.repository.user.UserRepository;
+import com.propertyapp.enums.NotificationType;
+import com.propertyapp.repository.property.PropertyContactEventRepository;
 import com.propertyapp.service.group.RealtorGroupService;
+import com.propertyapp.service.notification.NotificationService;
 import com.propertyapp.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +57,9 @@ public class PropertyServiceImpl implements PropertyService {
     private final PropertyMapper propertyMapper;
     private final LocalityRepository localityRepository;
     private final RealtorGroupService realtorGroupService;
+    private final PropertyContactEventRepository contactEventRepository;
+    private final InquiryRepository inquiryRepository;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -301,26 +311,104 @@ public class PropertyServiceImpl implements PropertyService {
     @CacheEvict(value = "properties", key = "#id")
     public void deleteProperty(Long id) {
         log.info("Deleting property: {}", id);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
-        
-        // Check ownership or admin role
+
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
-        boolean isOwner = property.getOwner().getId().equals(currentUserId);
+
         boolean isAdmin = SecurityUtils.hasRole("SUPER_ADMIN");
-        
-        if (!isOwner && !isAdmin) {
-            throw new UnauthorizedException("You don't have permission to delete this property");
+        boolean isRealtor = SecurityUtils.hasRole("REALTOR") || SecurityUtils.hasRole("REALTOR_GROUP_ADMIN");
+
+        if (isRealtor && !isAdmin) {
+            throw new UnauthorizedException("Realtors must submit a deletion request for admin approval.");
         }
-        
-        // Soft delete
+
+        if (!isAdmin) {
+            boolean isOwner = property.getOwner().getId().equals(currentUserId);
+            if (!isOwner) {
+                throw new UnauthorizedException("You can only delete your own properties.");
+            }
+        }
+
         property.markAsDeleted(currentUserId);
         propertyRepository.save(property);
-        
-        log.info("Property deleted successfully: {}", id);
+        log.info("Property deleted (userId={}): {}", currentUserId, id);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "properties", key = "#id")
+    public PropertyDTO requestDeletion(Long id) {
+        log.info("Deletion requested for property: {}", id);
+
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+
+        Long currentUserId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+
+        boolean isOwner = property.getOwner().getId().equals(currentUserId);
+        if (!isOwner) {
+            throw new UnauthorizedException("You can only request deletion of your own properties.");
+        }
+
+        if ("DELETION_REQUESTED".equals(property.getStatus())) {
+            throw new BadRequestException("A deletion request is already pending for this property.");
+        }
+
+        if ("INACTIVE".equals(property.getStatus())) {
+            throw new BadRequestException("This property is already inactive.");
+        }
+
+        property.setStatus("DELETION_REQUESTED");
+        property.setRejectionReason(null);
+        property = propertyRepository.save(property);
+        log.info("Deletion request submitted for property: {}", id);
+        return propertyMapper.toDTO(property);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "properties", key = "#id")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PropertyDTO approveDeletion(Long id) {
+        log.info("Admin approving deletion for property: {}", id);
+
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+
+        if (!"DELETION_REQUESTED".equals(property.getStatus())) {
+            throw new BadRequestException("Property does not have a pending deletion request.");
+        }
+
+        property.setStatus("INACTIVE");
+        property.setRejectionReason(null);
+        property = propertyRepository.save(property);
+        log.info("Deletion approved — property marked INACTIVE: {}", id);
+        return propertyMapper.toDTO(property);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "properties", key = "#id")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PropertyDTO rejectDeletion(Long id, String reason) {
+        log.info("Admin rejecting deletion for property: {}", id);
+
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+
+        if (!"DELETION_REQUESTED".equals(property.getStatus())) {
+            throw new BadRequestException("Property does not have a pending deletion request.");
+        }
+
+        property.setStatus("ACTIVE");
+        property.setRejectionReason(reason);
+        property = propertyRepository.save(property);
+        log.info("Deletion rejected — property restored to ACTIVE: {}", id);
+        return propertyMapper.toDTO(property);
     }
     
     @Override
@@ -573,6 +661,64 @@ public class PropertyServiceImpl implements PropertyService {
                     property.incrementViewCount();
                     propertyRepository.save(property);
                 });
+    }
+
+    @Override
+    @Transactional
+    public ContactRevealResponse revealContact(Long propertyId, Long userId) {
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", propertyId));
+
+        User owner = property.getOwner();
+        boolean alreadyContacted = contactEventRepository.existsByPropertyIdAndContactedById(propertyId, userId);
+
+        if (!alreadyContacted) {
+            User contactingUser = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+            // Record the contact reveal event (for analytics / dedup)
+            contactEventRepository.save(PropertyContactEvent.builder()
+                    .property(property)
+                    .contactedBy(contactingUser)
+                    .build());
+            property.incrementContactCount();
+            propertyRepository.save(property);
+
+            // Auto-create an inquiry so this buyer can rate the realtor later.
+            // Skip if they already sent a formal inquiry for this property.
+            if (!inquiryRepository.existsByProperty_IdAndInquirer_Id(propertyId, userId)) {
+                Inquiry autoInquiry = Inquiry.builder()
+                        .property(property)
+                        .inquirer(contactingUser)
+                        .name((contactingUser.getFirstName() + " " + contactingUser.getLastName()).trim())
+                        .email(contactingUser.getEmail())
+                        .phone(contactingUser.getPhone())
+                        .message("I revealed the contact details and reached out directly.")
+                        .status(InquiryStatus.NEW)
+                        .source("CONTACT_REVEAL")
+                        .build();
+                inquiryRepository.save(autoInquiry);
+                property.incrementInquiryCount();
+                propertyRepository.save(property);
+            }
+
+            String contactingName = (contactingUser.getFirstName() + " " + contactingUser.getLastName()).trim();
+            notificationService.send(
+                    owner.getId(),
+                    NotificationType.CONTACT_REVEALED,
+                    "Someone wants to contact you!",
+                    contactingName + " revealed your contact details for \"" + property.getTitle() + "\".",
+                    "PROPERTY",
+                    property.getId()
+            );
+        }
+
+        return ContactRevealResponse.builder()
+                .phone(owner.getPhone())
+                .email(owner.getEmail())
+                .ownerName((owner.getFirstName() + " " + owner.getLastName()).trim())
+                .alreadyContacted(alreadyContacted)
+                .build();
     }
 
     private Point createPoint(Double latitude, Double longitude) {

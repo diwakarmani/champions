@@ -45,6 +45,10 @@ public class Inquiry extends AuditableEntity {
     @Column(nullable = false, length = 20)
     private InquiryStatus status;
 
+    /** How this inquiry originated — "FORM" (buyer-submitted) or "CONTACT_REVEAL" (auto-created on reveal). */
+    @Column(length = 20)
+    private String source;
+
     @PrePersist
     private void prePersist() {
         if (status == null) status = InquiryStatus.NEW;

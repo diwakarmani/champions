@@ -185,6 +185,17 @@ app:
     expiry-minutes: 5
     length: 6
 
+  rating:
+    # Seconds after inquiry creation before a buyer may rate (time-based safety net).
+    # Production: 86400 (24 h). Override per-profile for testing.
+    eligibility-seconds: ${RATING_ELIGIBILITY_SECONDS:86400}
+
+  maintenance:
+    # Cron for MaintenanceScheduler.runAll(). Production: every 30 min.
+    cron: ${MAINTENANCE_CRON:0 */30 * * * *}
+    # Inquiries older than this (seconds) are auto-transitioned NEW → CONTACTED.
+    auto-contact-seconds: ${AUTO_CONTACT_SECONDS:86400}
+
   # Admin user created on first startup if not present in DB
   admin:
     email: ${ADMIN_EMAIL:admin@propertyapp.com}

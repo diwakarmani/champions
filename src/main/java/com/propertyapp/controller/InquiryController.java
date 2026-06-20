@@ -8,12 +8,14 @@ import com.propertyapp.entity.inquiry.Inquiry;
 import com.propertyapp.entity.inquiry.InquiryStatus;
 import com.propertyapp.entity.property.Property;
 import com.propertyapp.entity.user.User;
+import com.propertyapp.enums.NotificationType;
 import com.propertyapp.exception.BadRequestException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.exception.UnauthorizedException;
 import com.propertyapp.repository.inquiry.InquiryRepository;
 import com.propertyapp.repository.property.PropertyRepository;
 import com.propertyapp.repository.user.UserRepository;
+import com.propertyapp.service.notification.NotificationService;
 import com.propertyapp.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -38,6 +40,7 @@ public class InquiryController {
     private final InquiryRepository inquiryRepository;
     private final PropertyRepository propertyRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
@@ -71,6 +74,16 @@ public class InquiryController {
                 .build();
 
         Inquiry saved = inquiryRepository.save(inquiry);
+
+        notificationService.send(
+                property.getOwner().getId(),
+                NotificationType.INQUIRY_RECEIVED,
+                "New enquiry on your listing!",
+                request.getName() + " sent you an enquiry about \"" + property.getTitle() + "\".",
+                "PROPERTY",
+                property.getId()
+        );
+
         return ResponseEntity.ok(ApiResponse.success("Inquiry sent successfully", toDTO(saved)));
     }
 
@@ -145,11 +158,19 @@ public class InquiryController {
     // ── Helper ───────────────────────────────────────────────────────────────
 
     private InquiryDTO toDTO(Inquiry i) {
+        var owner = i.getProperty().getOwner();
+        boolean ownerIsRealtor = owner != null && owner.getRoles().stream()
+                .anyMatch(r -> "REALTOR".equals(r.getName()) || "REALTOR_GROUP_ADMIN".equals(r.getName()));
+
         return InquiryDTO.builder()
                 .id(i.getId())
                 .propertyId(i.getProperty().getId())
                 .propertyTitle(i.getProperty().getTitle())
                 .inquirerId(i.getInquirer() != null ? i.getInquirer().getId() : null)
+                .realtorId(ownerIsRealtor ? owner.getId() : null)
+                .realtorName(ownerIsRealtor
+                        ? (owner.getFirstName() + " " + owner.getLastName()).trim()
+                        : null)
                 .name(i.getName())
                 .email(i.getEmail())
                 .phone(i.getPhone())

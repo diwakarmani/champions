@@ -8,8 +8,11 @@ import com.propertyapp.entity.user.User;
 import com.propertyapp.exception.BadRequestException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.repository.property.PropertyRepository;
+import com.propertyapp.repository.realtor.RealtorRatingRepository;
 import com.propertyapp.repository.realtor.RealtorUserInteractionRepository;
 import com.propertyapp.repository.user.UserRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,7 @@ public class PublicRealtorServiceImpl implements PublicRealtorService {
     private final UserRepository userRepository;
     private final PropertyRepository propertyRepository;
     private final RealtorUserInteractionRepository interactionRepository;
+    private final RealtorRatingRepository ratingRepository;
     private final JdbcTemplate jdbcTemplate;
 
     @Override
@@ -40,6 +44,12 @@ public class PublicRealtorServiceImpl implements PublicRealtorService {
             connectedUsers = 0;
         }
 
+        long ratingCount   = ratingRepository.countByRealtor_Id(realtorId);
+        Double rawAverage  = ratingRepository.findAverageRatingByRealtorId(realtorId).orElse(null);
+        // Round to 1 decimal place (e.g. 4.2666… → 4.3)
+        Double ratingAvg   = rawAverage == null ? null
+                : BigDecimal.valueOf(rawAverage).setScale(1, RoundingMode.HALF_UP).doubleValue();
+
         return RealtorProfileDTO.builder()
                 .id(realtor.getId())
                 .name((realtor.getFirstName() + " " + realtor.getLastName()).trim())
@@ -49,8 +59,8 @@ public class PublicRealtorServiceImpl implements PublicRealtorService {
                 .bio(realtor.getBio())
                 .areasServed(propertyRepository.findDistinctActiveCitiesByOwnerId(realtorId))
                 .languages(List.of())
-                .ratingAverage(null)
-                .ratingCount(0)
+                .ratingAverage(ratingAvg)
+                .ratingCount(ratingCount)
                 .totalUserInteractions(connectedUsers)
                 .activeListingsCount(activeListings)
                 .verificationStatus(realtor.isEmailVerified() || realtor.isMobileVerified() ? "VERIFIED" : "UNVERIFIED")

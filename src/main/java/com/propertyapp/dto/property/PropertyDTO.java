@@ -32,7 +32,7 @@ public class PropertyDTO {
     private Long ownerId;
     private String ownerName;
     private String ownerEmail;
-    private String ownerPhone;
+    private String ownerPhoneMasked;  // masked e.g. "+91 98****10"; real phone via /reveal-contact
     private boolean ownerIsRealtor;
 
     // Admin fields
@@ -87,6 +87,7 @@ public class PropertyDTO {
     // Metrics
     private Integer viewCount;
     private Integer inquiryCount;
+    private Integer contactCount;
     private LocalDateTime publishedAt;
     
     // Relationships

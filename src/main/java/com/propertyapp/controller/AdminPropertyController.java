@@ -67,6 +67,23 @@ public class AdminPropertyController {
         return ResponseEntity.ok(ApiResponse.success("Property rejected", dto));
     }
 
+    @PostMapping("/{id}/approve-deletion")
+    @Operation(summary = "Approve a deletion request — marks property as INACTIVE")
+    public ResponseEntity<ApiResponse<PropertyDTO>> approveDeletion(@PathVariable Long id) {
+        PropertyDTO dto = propertyService.approveDeletion(id);
+        return ResponseEntity.ok(ApiResponse.success("Deletion approved. Property is now inactive.", dto));
+    }
+
+    @PostMapping("/{id}/reject-deletion")
+    @Operation(summary = "Reject a deletion request — restores property to ACTIVE")
+    public ResponseEntity<ApiResponse<PropertyDTO>> rejectDeletion(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body) {
+        String reason = body != null ? body.get("reason") : null;
+        PropertyDTO dto = propertyService.rejectDeletion(id, reason);
+        return ResponseEntity.ok(ApiResponse.success("Deletion request rejected. Property restored to active.", dto));
+    }
+
     @PatchMapping("/{id}/toggle-featured")
     @Operation(summary = "Toggle featured flag")
     public ResponseEntity<ApiResponse<PropertyDTO>> toggleFeatured(@PathVariable Long id) {

@@ -2,6 +2,7 @@ package com.propertyapp.config;
 
 import com.propertyapp.security.JwtAuthenticationFilter;
 import com.propertyapp.util.PasswordUtils;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -51,9 +52,18 @@ public class SecurityConfig {
                         "/api/discovery/**",
                         "/api/properties/**",
                         "/api/property-types/**",
-                        "/api/locations/**"
+                        "/api/locations/**",
+                        "/api/realtors/*/ratings"
                 ).permitAll()
                 .anyRequest().authenticated()
+            )
+            .exceptionHandling(e -> e
+                .authenticationEntryPoint((request, response, ex) -> {
+                    response.setContentType("application/json");
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write(
+                        "{\"success\":false,\"message\":\"Authentication required\",\"status\":401}");
+                })
             )
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

@@ -3,7 +3,6 @@ package com.propertyapp.service.property;
 import com.propertyapp.dto.common.PageResponse;
 import com.propertyapp.dto.property.*;
 import org.springframework.data.domain.Pageable;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -41,6 +40,12 @@ public interface PropertyService {
 
     PropertyDTO rejectProperty(Long id, String reason);
 
+    PropertyDTO requestDeletion(Long id);
+
+    PropertyDTO approveDeletion(Long id);
+
+    PropertyDTO rejectDeletion(Long id, String reason);
+
     PropertyDTO toggleFeatured(Long id);
 
     PropertyDTO toggleVerified(Long id);
@@ -48,4 +53,6 @@ public interface PropertyService {
     List<PropertyDTO> getFeaturedProperties(int limit);
     
     void incrementViewCount(Long id);
+
+    ContactRevealResponse revealContact(Long propertyId, Long userId);
 }

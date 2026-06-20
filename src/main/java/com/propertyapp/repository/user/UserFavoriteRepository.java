@@ -38,4 +38,21 @@ public interface UserFavoriteRepository extends JpaRepository<UserFavorite, Long
     void deleteByUserIdAndPropertyId(Long userId, Long propertyId);
 
     long countByUserId(Long userId);
+
+    /** Single query ownership check — avoids N round-trips for compare validation. */
+    @Query("SELECT COUNT(f) FROM UserFavorite f WHERE f.user.id = :userId AND f.property.id IN :ids")
+    long countByUserIdAndPropertyIdIn(@Param("userId") Long userId, @Param("ids") List<Long> ids);
+
+    /** Eagerly fetches images + amenities for comparison — avoids MultipleBagFetchException
+     *  because both collections are Set (not List). */
+    @Query("""
+            SELECT DISTINCT p FROM Property p
+            LEFT JOIN FETCH p.images
+            JOIN FETCH p.owner
+            JOIN FETCH p.propertyType
+            LEFT JOIN FETCH p.propertySubType
+            LEFT JOIN FETCH p.amenities
+            WHERE p.id IN :ids
+            """)
+    List<Property> findByIdsWithImagesAndAmenities(@Param("ids") List<Long> ids);
 }

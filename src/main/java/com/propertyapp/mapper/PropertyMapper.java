@@ -18,8 +18,8 @@ public interface PropertyMapper {
     @Mapping(target = "propertySubTypeName", source = "propertySubType.name")
     @Mapping(target = "ownerId", source = "owner.id")
     @Mapping(target = "ownerName", expression = "java(property.getOwner().getFirstName() + \" \" + property.getOwner().getLastName())")
-    @Mapping(target = "ownerEmail", source = "owner.email")
-    @Mapping(target = "ownerPhone", source = "owner.phone")
+    @Mapping(target = "ownerEmail", ignore = true)
+    @Mapping(target = "ownerPhoneMasked", expression = "java(maskPhone(property.getOwner().getPhone()))")
     @Mapping(target = "ownerIsRealtor", expression = "java(property.getOwner().getRoles().stream().anyMatch(r -> \"REALTOR\".equals(r.getName()) || \"REALTOR_GROUP_ADMIN\".equals(r.getName())))")
     @Mapping(target = "images", source = "images")
     @Mapping(target = "primaryImageUrl", expression = "java(getPrimaryImageUrl(property))")
@@ -69,6 +69,29 @@ public interface PropertyMapper {
     
     Set<PropertyAmenityDTO> toAmenityDTOSet(Set<PropertyAmenity> entities);
     
+    @Mapping(target = "propertyTypeName",    source = "propertyType.name")
+    @Mapping(target = "propertySubTypeName", source = "propertySubType.name")
+    @Mapping(target = "primaryImageUrl",     expression = "java(getPrimaryImageUrl(property))")
+    @Mapping(target = "isVerified",          source = "verified")
+    @Mapping(target = "isFeatured",          source = "featured")
+    @Mapping(target = "isPremium",           source = "premium")
+    @Mapping(target = "amenities",           source = "amenities")
+    PropertyCompareDTO toCompareDTO(Property property);
+
+    // Mask all but first 2 significant digits and last 2 digits of a phone number
+    @Named("maskPhone")
+    default String maskPhone(String phone) {
+        if (phone == null || phone.isBlank()) return null;
+        String cleaned = phone.replaceAll("[\\s\\-()]", "");
+        if (cleaned.length() <= 4) return "XXXX";
+        int prefixEnd = cleaned.startsWith("+") ? Math.min(4, cleaned.length() - 2) : Math.min(2, cleaned.length() - 2);
+        String prefix = cleaned.substring(0, prefixEnd);
+        String suffix = cleaned.substring(cleaned.length() - 2);
+        int maskLen = cleaned.length() - prefixEnd - 2;
+        String masked = prefix + "X".repeat(Math.max(4, maskLen)) + suffix;
+        return masked;
+    }
+
     // Helper method to get primary image URL
     default String getPrimaryImageUrl(Property property) {
         if (property.getImages() == null || property.getImages().isEmpty()) {

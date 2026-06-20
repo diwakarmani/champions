@@ -172,10 +172,14 @@ public class Property extends SoftDeletableEntity {
     @Column(name = "view_count")
     @Builder.Default
     private Integer viewCount = 0;
-    
+
     @Column(name = "inquiry_count")
     @Builder.Default
     private Integer inquiryCount = 0;
+
+    @Column(name = "contact_count")
+    @Builder.Default
+    private Integer contactCount = 0;
     
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
@@ -217,6 +221,10 @@ public class Property extends SoftDeletableEntity {
     
     public void incrementInquiryCount() {
         this.inquiryCount++;
+    }
+
+    public void incrementContactCount() {
+        this.contactCount = (this.contactCount == null ? 0 : this.contactCount) + 1;
     }
     
     public void publish() {
