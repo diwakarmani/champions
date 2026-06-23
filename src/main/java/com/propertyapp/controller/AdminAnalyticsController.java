@@ -2,8 +2,6 @@ package com.propertyapp.controller;
 
 import com.propertyapp.dto.analytics.PlatformStatsDTO;
 import com.propertyapp.dto.common.ApiResponse;
-import com.propertyapp.enums.GroupStatus;
-import com.propertyapp.repository.group.RealtorGroupRepository;
 import com.propertyapp.repository.property.PropertyRepository;
 import com.propertyapp.repository.user.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,7 +26,6 @@ public class AdminAnalyticsController {
 
     private final UserRepository userRepository;
     private final PropertyRepository propertyRepository;
-    private final RealtorGroupRepository realtorGroupRepository;
 
     @GetMapping("/platform")
     @Operation(summary = "Get platform stats", description = "Returns platform-wide aggregate statistics for super admin")
@@ -42,9 +39,7 @@ public class AdminAnalyticsController {
                 .pendingApprovals(propertyRepository.countByStatusAndDeletedAtIsNull("PENDING_APPROVAL"))
                 .soldProperties(propertyRepository.countByStatusAndDeletedAtIsNull("SOLD"))
                 .rentedProperties(propertyRepository.countByStatusAndDeletedAtIsNull("RENTED"))
-                .totalGroups(realtorGroupRepository.count())
-                .activeGroups(realtorGroupRepository.countByStatus(GroupStatus.ACTIVE))
-                .newUsersThisMonth(userRepository.countCreatedAfter(startOfMonth))
+.newUsersThisMonth(userRepository.countCreatedAfter(startOfMonth))
                 .newPropertiesThisMonth(propertyRepository.countCreatedAfter(startOfMonth))
                 .build();
 

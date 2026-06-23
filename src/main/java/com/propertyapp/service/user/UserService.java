@@ -36,5 +36,4 @@ public interface UserService {
 
     UserDTO deactivateUser(Long id);
 
-    PageResponse<UserDTO> getPendingGroupAdmins(Pageable pageable);
 }

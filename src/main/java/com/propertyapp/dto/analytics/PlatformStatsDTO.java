@@ -14,8 +14,6 @@ public class PlatformStatsDTO {
     private long totalProperties;
     private long activeListings;
     private long pendingApprovals;
-    private long totalGroups;
-    private long activeGroups;
     private long soldProperties;
     private long rentedProperties;
     private long newUsersThisMonth;

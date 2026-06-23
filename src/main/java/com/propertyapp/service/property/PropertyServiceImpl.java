@@ -18,7 +18,6 @@ import com.propertyapp.repository.property.*;
 import com.propertyapp.repository.user.UserRepository;
 import com.propertyapp.enums.NotificationType;
 import com.propertyapp.repository.property.PropertyContactEventRepository;
-import com.propertyapp.service.group.RealtorGroupService;
 import com.propertyapp.service.notification.NotificationService;
 import com.propertyapp.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -56,14 +55,13 @@ public class PropertyServiceImpl implements PropertyService {
     private final UserRepository userRepository;
     private final PropertyMapper propertyMapper;
     private final LocalityRepository localityRepository;
-    private final RealtorGroupService realtorGroupService;
-    private final PropertyContactEventRepository contactEventRepository;
+private final PropertyContactEventRepository contactEventRepository;
     private final InquiryRepository inquiryRepository;
     private final NotificationService notificationService;
 
     @Override
     @Transactional
-    @PreAuthorize("hasAnyRole('SELLER', 'REALTOR', 'REALTOR_GROUP_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SELLER', 'REALTOR', 'SUPER_ADMIN')")
     public PropertyDTO createProperty(PropertyCreateRequest request) {
 
         log.info("Creating new property: {}", request.getTitle());
@@ -319,7 +317,7 @@ public class PropertyServiceImpl implements PropertyService {
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
 
         boolean isAdmin = SecurityUtils.hasRole("SUPER_ADMIN");
-        boolean isRealtor = SecurityUtils.hasRole("REALTOR") || SecurityUtils.hasRole("REALTOR_GROUP_ADMIN");
+        boolean isRealtor = SecurityUtils.hasRole("REALTOR");
 
         if (isRealtor && !isAdmin) {
             throw new UnauthorizedException("Realtors must submit a deletion request for admin approval.");
@@ -433,14 +431,15 @@ public class PropertyServiceImpl implements PropertyService {
             throw new BadRequestException("Property must have title and price to be published");
         }
 
-        // If owner is part of a realtor group → requires group admin approval
-        if (realtorGroupService.isUserInGroup(currentUserId)) {
-            property.setStatus("PENDING_APPROVAL");
-            log.info("Property {} submitted for group approval by userId={}", id, currentUserId);
-        } else {
-            property.publish(); // → ACTIVE immediately
-            log.info("Property published directly as ACTIVE: {}", id);
+        if ("PENDING_APPROVAL".equals(property.getStatus())) {
+            throw new BadRequestException("Property is already pending admin approval");
         }
+        if ("ACTIVE".equals(property.getStatus())) {
+            throw new BadRequestException("Property is already active");
+        }
+
+        property.setStatus("PENDING_APPROVAL");
+        log.info("Property submitted for admin approval: {}", id);
 
         property = propertyRepository.save(property);
         return propertyMapper.toDTO(property);
@@ -449,7 +448,7 @@ public class PropertyServiceImpl implements PropertyService {
     @Override
     @Transactional
     @CacheEvict(value = "properties", key = "#id")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'REALTOR_GROUP_ADMIN', 'REALTOR')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO updatePropertyStatus(Long id, String status) {
         log.info("Updating property status: {} to {}", id, status);
         
@@ -589,7 +588,11 @@ public class PropertyServiceImpl implements PropertyService {
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
         property.setStatus("ACTIVE");
         property.setRejectionReason(null);
+        if (property.getPublishedAt() == null) {
+            property.setPublishedAt(java.time.LocalDateTime.now());
+        }
         property = propertyRepository.save(property);
+        log.info("Property approved and set ACTIVE: {}", id);
         return propertyMapper.toDTO(property);
     }
 
@@ -626,7 +629,7 @@ public class PropertyServiceImpl implements PropertyService {
     @Override
     @Transactional
     @CacheEvict(value = "properties", key = "#id")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'REALTOR_GROUP_ADMIN', 'REALTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'REALTOR')")
     public PropertyDTO toggleVerified(Long id) {
         log.info("Toggling verified status for property: {}", id);
         

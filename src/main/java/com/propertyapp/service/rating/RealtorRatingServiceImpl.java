@@ -104,7 +104,7 @@ public class RealtorRatingServiceImpl implements RealtorRatingService {
         User realtor = userRepository.findByIdAndDeletedAtIsNull(realtorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Realtor", "id", realtorId));
         boolean isRealtor = realtor.getRoles().stream()
-                .anyMatch(r -> "REALTOR".equals(r.getName()) || "REALTOR_GROUP_ADMIN".equals(r.getName()));
+                .anyMatch(r -> "REALTOR".equals(r.getName()));
         if (!realtor.isActive() || !isRealtor) {
             throw new ResourceNotFoundException("Realtor", "id", realtorId);
         }

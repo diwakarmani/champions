@@ -111,7 +111,7 @@ public class PublicRealtorServiceImpl implements PublicRealtorService {
         User realtor = userRepository.findByIdAndDeletedAtIsNull(realtorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Realtor", "id", realtorId));
         boolean hasRealtorRole = realtor.getRoles().stream().anyMatch(
-                role -> "REALTOR".equals(role.getName()) || "REALTOR_GROUP_ADMIN".equals(role.getName()));
+                role -> "REALTOR".equals(role.getName()));
         if (!realtor.isActive() || !hasRealtorRole) {
             throw new ResourceNotFoundException("Realtor", "id", realtorId);
         }

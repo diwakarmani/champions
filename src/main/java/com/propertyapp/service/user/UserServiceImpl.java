@@ -243,15 +243,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public PageResponse<UserDTO> getPendingGroupAdmins(Pageable pageable) {
-        log.info("Fetching pending group admins");
-        Page<User> users = userRepository.findPendingGroupAdmins(pageable);
-        return PageResponse.of(users.map(userMapper::toDTO));
-    }
-
-    @Override
     @Transactional
     public UserAddressDTO addAddress(UserAddressDTO addressDTO) {
         Long userId = SecurityUtils.getCurrentUserId()

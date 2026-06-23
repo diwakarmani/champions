@@ -130,16 +130,6 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success("User deactivated successfully", userService.deactivateUser(id)));
     }
 
-    @GetMapping("/pending-group-admins")
-    @Operation(summary = "Get pending group admin registrations (Admin only)")
-    public ResponseEntity<ApiResponse<PageResponse<UserDTO>>> getPendingGroupAdmins(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
-        Pageable pageable = PageRequest.of(page, Math.min(size, Constants.MAX_PAGE_SIZE));
-        return ResponseEntity.ok(ApiResponse.success(userService.getPendingGroupAdmins(pageable)));
-    }
-
     @PostMapping("/me/addresses")
     @Operation(summary = "Add user address")
     public ResponseEntity<ApiResponse<UserAddressDTO>> addAddress(

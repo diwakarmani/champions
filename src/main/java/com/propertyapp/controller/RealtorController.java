@@ -25,7 +25,7 @@ public class RealtorController {
 
     @GetMapping("/stats")
     @Operation(summary = "Get realtor stats", description = "Returns listing counts and total views for the authenticated realtor")
-    @PreAuthorize("hasAnyRole('REALTOR', 'REALTOR_GROUP_ADMIN')")
+    @PreAuthorize("hasRole('REALTOR')")
     public ResponseEntity<ApiResponse<RealtorStatsDTO>> getRealtorStats() {
         Long ownerId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new com.propertyapp.exception.UnauthorizedException("Not authenticated"));

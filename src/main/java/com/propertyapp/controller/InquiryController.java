@@ -160,7 +160,7 @@ public class InquiryController {
     private InquiryDTO toDTO(Inquiry i) {
         var owner = i.getProperty().getOwner();
         boolean ownerIsRealtor = owner != null && owner.getRoles().stream()
-                .anyMatch(r -> "REALTOR".equals(r.getName()) || "REALTOR_GROUP_ADMIN".equals(r.getName()));
+                .anyMatch(r -> "REALTOR".equals(r.getName()));
 
         return InquiryDTO.builder()
                 .id(i.getId())

@@ -7,8 +7,7 @@ public final class Constants {
     public static final String ROLE_BUYER = "BUYER";
     public static final String ROLE_SELLER = "SELLER";
     public static final String ROLE_REALTOR = "REALTOR";
-    public static final String ROLE_REALTOR_GROUP_ADMIN = "REALTOR_GROUP_ADMIN";
-    public static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
+public static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
     
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
     public static final String IDEMPOTENCY_KEY_HEADER = "X-Idempotency-Key";

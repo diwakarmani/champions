@@ -43,9 +43,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.createdAt > :since AND u.deletedAt IS NULL")
     long countCreatedAfter(@Param("since") java.time.LocalDateTime since);
 
-    @Query("SELECT u FROM User u JOIN u.roles r WHERE r.name = 'REALTOR_GROUP_ADMIN' AND u.isActive = false AND u.deletedAt IS NULL")
-    Page<User> findPendingGroupAdmins(Pageable pageable);
-
     @Query("SELECT COUNT(u) FROM User u JOIN u.roles r WHERE r.name = :roleName AND u.deletedAt IS NULL")
     long countByRole(@Param("roleName") String roleName);
 
