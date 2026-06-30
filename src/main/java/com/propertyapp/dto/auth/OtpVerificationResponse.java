@@ -20,7 +20,7 @@ public class OtpVerificationResponse {
     // User info — `id` aligns with password-login AuthResponse and /users/me
     private Long id;
     private String email;
-    private String mobile;
+    private String phone;
     private String firstName;
     private String lastName;
     private List<String> roles;

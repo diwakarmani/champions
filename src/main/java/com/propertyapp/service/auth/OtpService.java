@@ -23,4 +23,17 @@ public interface OtpService {
      * Cleanup expired OTPs
      */
     void cleanupExpiredOtps();
+
+    /**
+     * Send an OTP to a contact (phone or email) that the authenticated user wants
+     * to adopt as their new phone/email. Does NOT require the identifier to already
+     * belong to any user — the uniqueness check is the caller's responsibility.
+     */
+    void sendContactChangeOtp(String newContact, String ipAddress);
+
+    /**
+     * Verify an OTP that was sent via sendContactChangeOtp. Throws BadRequestException
+     * on wrong/expired code. Does not issue JWT tokens — just confirms ownership.
+     */
+    void verifyContactChangeOtp(String newContact, String otpCode);
 }

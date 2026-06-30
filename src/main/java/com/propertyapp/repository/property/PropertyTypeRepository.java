@@ -13,7 +13,9 @@ public interface PropertyTypeRepository extends JpaRepository<PropertyType, Long
     Optional<PropertyType> findByName(String name);
     
     List<PropertyType> findByIsActiveTrueOrderByDisplayOrder();
-    
+
+    List<PropertyType> findAllByOrderByDisplayOrderAsc();
+
     boolean existsByName(String name);
 
     List<PropertyType> findByIsActiveTrueOrderByDisplayOrderAsc();

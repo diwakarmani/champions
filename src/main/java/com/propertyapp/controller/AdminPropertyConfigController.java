@@ -4,6 +4,7 @@ import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.dto.property.PropertyAmenityDTO;
 import com.propertyapp.dto.property.PropertySubTypeDTO;
 import com.propertyapp.dto.property.PropertyTypeDTO;
+import java.util.List;
 import com.propertyapp.service.property.PropertyTypeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -21,6 +22,20 @@ import org.springframework.web.bind.annotation.*;
 public class AdminPropertyConfigController {
 
     private final PropertyTypeService propertyTypeService;
+
+    @GetMapping("/types")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Get all property types including inactive (admin)")
+    public ResponseEntity<ApiResponse<List<PropertyTypeDTO>>> getAllTypes() {
+        return ResponseEntity.ok(ApiResponse.success("Types fetched", propertyTypeService.getAllPropertyTypesAdmin()));
+    }
+
+    @GetMapping("/amenities")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Get all amenities including inactive (admin)")
+    public ResponseEntity<ApiResponse<List<PropertyAmenityDTO>>> getAllAmenities() {
+        return ResponseEntity.ok(ApiResponse.success("Amenities fetched", propertyTypeService.getAllAmenitiesAdmin()));
+    }
 
     @PostMapping("/types")
     @SecurityRequirement(name = "Bearer Authentication")

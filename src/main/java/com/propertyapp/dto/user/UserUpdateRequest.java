@@ -15,10 +15,7 @@ public class UserUpdateRequest {
     
     @Size(max = 50)
     private String lastName;
-    
-    @Size(max = 20)
-    private String phone;
-    
+
     private LocalDate dateOfBirth;
     private String gender;
     private String bio;

@@ -8,6 +8,7 @@ import com.propertyapp.util.Constants;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -144,5 +145,58 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> removeAddress(@PathVariable Long addressId) {
         userService.removeAddress(addressId);
         return ResponseEntity.ok(ApiResponse.success("Address removed successfully", null));
+    }
+
+    // ── Secure contact-change (OTP-gated) ────────────────────────────────────
+
+    @PostMapping("/me/phone/initiate-change")
+    @Operation(summary = "Send OTP to a new phone number to begin a verified phone change")
+    public ResponseEntity<ApiResponse<Void>> initiatePhoneChange(
+            @Valid @RequestBody ContactChangeRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        userService.initiatePhoneChange(request, getClientIp(httpRequest));
+        return ResponseEntity.ok(ApiResponse.success(
+                "OTP sent to your new phone number. Enter it to confirm the change.", null));
+    }
+
+    @PostMapping("/me/phone/verify-change")
+    @Operation(summary = "Verify OTP and apply the new phone number")
+    public ResponseEntity<ApiResponse<UserDTO>> verifyPhoneChange(
+            @Valid @RequestBody VerifyContactChangeRequest request
+    ) {
+        UserDTO user = userService.verifyPhoneChange(request);
+        return ResponseEntity.ok(ApiResponse.success("Phone number updated successfully", user));
+    }
+
+    @PostMapping("/me/email/initiate-change")
+    @Operation(summary = "Send OTP to a new email address to begin a verified email change")
+    public ResponseEntity<ApiResponse<Void>> initiateEmailChange(
+            @Valid @RequestBody ContactChangeRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        userService.initiateEmailChange(request, getClientIp(httpRequest));
+        return ResponseEntity.ok(ApiResponse.success(
+                "OTP sent to your new email address. Enter it to confirm the change.", null));
+    }
+
+    @PostMapping("/me/email/verify-change")
+    @Operation(summary = "Verify OTP and apply the new email address")
+    public ResponseEntity<ApiResponse<UserDTO>> verifyEmailChange(
+            @Valid @RequestBody VerifyContactChangeRequest request
+    ) {
+        UserDTO user = userService.verifyEmailChange(request);
+        return ResponseEntity.ok(ApiResponse.success("Email address updated successfully", user));
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        return ip;
     }
 }

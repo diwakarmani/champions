@@ -16,6 +16,8 @@ public interface UserMapper {
     
     @Mapping(target = "roles", source = "roles", qualifiedByName = "rolesToStrings")
     @Mapping(target = "addresses", source = "addresses")
+    @Mapping(target = "phoneVerified", source = "mobileVerified")
+    @Mapping(target = "dateOfBirth", expression = "java(user.getDateOfBirth() != null ? user.getDateOfBirth().toLocalDate() : null)")
     UserDTO toDTO(User user);
     
     List<UserDTO> toDTOList(List<User> users);

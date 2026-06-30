@@ -20,8 +20,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByIdAndDeletedAtIsNull(Long id);
     
     boolean existsByEmail(String email);
-    
+
+    boolean existsByEmailAndDeletedAtIsNull(String email);
+
     boolean existsByPhone(String phone);
+
+    boolean existsByPhoneAndDeletedAtIsNull(String phone);
     
     @Query("SELECT u FROM User u WHERE u.deletedAt IS NULL " +
            "AND (LOWER(u.firstName) LIKE LOWER(CONCAT('%', :search, '%')) " +
@@ -34,11 +38,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     
     Page<User> findAllByDeletedAtIsNull(Pageable pageable);
 
-    // Find by email or mobile
-    Optional<User> findByEmailOrPhone(String email, String mobile);
-
-    // Find by mobile
-    Optional<User> findByPhone(String mobile);
+    // Find by email or phone — used by OTP flow; excludes soft-deleted accounts,
+    // and uses LOWER() on email so mixed-case stored addresses are found correctly.
+    @Query("SELECT u FROM User u WHERE u.deletedAt IS NULL AND (LOWER(u.email) = LOWER(:email) OR u.phone = :phone)")
+    Optional<User> findByEmailOrPhone(@Param("email") String email, @Param("phone") String phone);
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.createdAt > :since AND u.deletedAt IS NULL")
     long countCreatedAfter(@Param("since") java.time.LocalDateTime since);

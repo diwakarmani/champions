@@ -5,6 +5,7 @@ import com.propertyapp.util.CorrelationIdUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.auth.AuthenticationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -118,7 +119,7 @@ public class    GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         log.error("Duplicate resource: {}", ex.getMessage());
-        
+
         ErrorResponse error = ErrorResponse.builder()
                 .success(false)
                 .message(ex.getMessage())
@@ -127,7 +128,28 @@ public class    GlobalExceptionHandler {
                 .path(request.getRequestURI())
                 .correlationId(CorrelationIdUtils.get())
                 .build();
-        
+
+        return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+    }
+
+    // Catches unique-constraint violations that slip past the application-level check
+    // (e.g. two requests racing to claim the same phone/email simultaneously).
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request
+    ) {
+        log.error("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+
+        ErrorResponse error = ErrorResponse.builder()
+                .success(false)
+                .message("This value is already in use. Please choose a different one.")
+                .error("Conflict")
+                .status(HttpStatus.CONFLICT.value())
+                .path(request.getRequestURI())
+                .correlationId(CorrelationIdUtils.get())
+                .build();
+
         return new ResponseEntity<>(error, HttpStatus.CONFLICT);
     }
     

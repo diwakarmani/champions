@@ -151,7 +151,25 @@ public class InquiryController {
             throw new BadRequestException("Invalid status. Must be NEW, CONTACTED, or CLOSED");
         }
 
+        if (!inquiry.getStatus().canTransitionTo(newStatus)) {
+            throw new BadRequestException(
+                "Cannot transition inquiry from " + inquiry.getStatus() + " to " + newStatus +
+                ". Allowed transitions: NEW → CONTACTED → CLOSED");
+        }
+
         inquiry.setStatus(newStatus);
+
+        if (newStatus == InquiryStatus.CONTACTED && inquiry.getInquirer() != null) {
+            notificationService.send(
+                    inquiry.getInquirer().getId(),
+                    NotificationType.CONTACT_REVEALED,
+                    "A seller responded to your inquiry!",
+                    "Your inquiry about \"" + inquiry.getProperty().getTitle() + "\" has been updated.",
+                    "PROPERTY",
+                    inquiry.getProperty().getId()
+            );
+        }
+
         return ResponseEntity.ok(ApiResponse.success("Status updated", toDTO(inquiry)));
     }
 

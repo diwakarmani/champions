@@ -13,7 +13,9 @@ import java.util.Set;
 public interface PropertyAmenityRepository extends JpaRepository<PropertyAmenity, Long> {
     
     List<PropertyAmenity> findByIsActiveTrueOrderByDisplayOrder();
-    
+
+    List<PropertyAmenity> findAllByOrderByDisplayOrderAsc();
+
     Set<PropertyAmenity> findByIdIn(Set<Long> ids);
     
     List<PropertyAmenity> findByCategoryOrderByDisplayOrder(String category);

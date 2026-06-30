@@ -6,12 +6,14 @@ import com.propertyapp.entity.user.Role;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.entity.user.UserAddress;
 import com.propertyapp.exception.BadRequestException;
+import com.propertyapp.exception.DuplicateResourceException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.exception.UnauthorizedException;
 import com.propertyapp.mapper.UserMapper;
 import com.propertyapp.repository.user.RoleRepository;
 import com.propertyapp.repository.user.UserAddressRepository;
 import com.propertyapp.repository.user.UserRepository;
+import com.propertyapp.service.auth.OtpService;
 import com.propertyapp.util.PasswordUtils;
 import com.propertyapp.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -25,16 +27,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class UserServiceImpl implements UserService {
-    
+
+    // E.164: starts with +, then 1-3 digit country code, then 6-14 digits
+    private static final Pattern E164_PATTERN = Pattern.compile("^\\+[1-9]\\d{6,14}$");
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9+_.-]+@(.+)$");
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final UserAddressRepository addressRepository;
     private final UserMapper userMapper;
+    private final OtpService otpService;
     
     @Override
     @Transactional(readOnly = true)
@@ -108,9 +117,6 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
-        }
-        if (request.getPhone() != null) {
-            user.setPhone(request.getPhone());
         }
         if (request.getDateOfBirth() != null) {
             user.setDateOfBirth(request.getDateOfBirth().atStartOfDay());
@@ -264,14 +270,119 @@ public class UserServiceImpl implements UserService {
     public void removeAddress(Long addressId) {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
+
         UserAddress address = addressRepository.findById(addressId)
                 .orElseThrow(() -> new ResourceNotFoundException("Address", "id", addressId));
-        
+
         if (!address.getUser().getId().equals(userId)) {
             throw new UnauthorizedException("You don't have permission to delete this address");
         }
-        
+
         addressRepository.delete(address);
+    }
+
+    // ── Secure contact-change (OTP-gated) ────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void initiatePhoneChange(ContactChangeRequest request, String ipAddress) {
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+        User user = userRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        String newPhone = request.getNewContact().trim();
+
+        if (!E164_PATTERN.matcher(newPhone).matches()) {
+            throw new BadRequestException(
+                    "Invalid phone format. Must include country code, e.g. +12025551234");
+        }
+        if (newPhone.equals(user.getPhone())) {
+            throw new BadRequestException(
+                    "New phone number is the same as your current phone number");
+        }
+        if (userRepository.existsByPhoneAndDeletedAtIsNull(newPhone)) {
+            throw new DuplicateResourceException("User", "phone", newPhone);
+        }
+
+        otpService.sendContactChangeOtp(newPhone, ipAddress);
+        log.info("Phone change OTP initiated for user {} → {}", userId, newPhone);
+    }
+
+    @Override
+    @Transactional
+    public UserDTO verifyPhoneChange(VerifyContactChangeRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+        User user = userRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        String newPhone = request.getNewContact().trim();
+
+        // Re-check uniqueness in case another user claimed the number between initiate and verify
+        if (userRepository.existsByPhoneAndDeletedAtIsNull(newPhone)
+                && !newPhone.equals(user.getPhone())) {
+            throw new DuplicateResourceException("User", "phone", newPhone);
+        }
+
+        // Throws BadRequestException if OTP is wrong/expired/max-attempts
+        otpService.verifyContactChangeOtp(newPhone, request.getOtpCode());
+
+        user.setPhone(newPhone);
+        user.setMobileVerified(true);
+        user = userRepository.save(user);
+
+        log.info("Phone updated successfully for user {}", userId);
+        return userMapper.toDTO(user);
+    }
+
+    @Override
+    @Transactional
+    public void initiateEmailChange(ContactChangeRequest request, String ipAddress) {
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+        User user = userRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        String newEmail = request.getNewContact().trim().toLowerCase();
+
+        if (!EMAIL_PATTERN.matcher(newEmail).matches()) {
+            throw new BadRequestException("Invalid email address format");
+        }
+        if (newEmail.equalsIgnoreCase(user.getEmail())) {
+            throw new BadRequestException(
+                    "New email address is the same as your current email");
+        }
+        if (userRepository.existsByEmailAndDeletedAtIsNull(newEmail)) {
+            throw new DuplicateResourceException("User", "email", newEmail);
+        }
+
+        otpService.sendContactChangeOtp(newEmail, ipAddress);
+        log.info("Email change OTP initiated for user {} → {}", userId, newEmail);
+    }
+
+    @Override
+    @Transactional
+    public UserDTO verifyEmailChange(VerifyContactChangeRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+        User user = userRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        String newEmail = request.getNewContact().trim().toLowerCase();
+
+        if (userRepository.existsByEmailAndDeletedAtIsNull(newEmail)
+                && !newEmail.equalsIgnoreCase(user.getEmail())) {
+            throw new DuplicateResourceException("User", "email", newEmail);
+        }
+
+        otpService.verifyContactChangeOtp(newEmail, request.getOtpCode());
+
+        user.setEmail(newEmail);
+        user.setEmailVerified(true);
+        user = userRepository.save(user);
+
+        log.info("Email updated successfully for user {}", userId);
+        return userMapper.toDTO(user);
     }
 }

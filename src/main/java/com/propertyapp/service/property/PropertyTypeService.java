@@ -2,6 +2,8 @@ package com.propertyapp.service.property;
 
 import com.propertyapp.dto.property.*;
 import com.propertyapp.entity.property.PropertyAmenity;
+import com.propertyapp.exception.DuplicateResourceException;
+import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.entity.property.PropertySubType;
 import com.propertyapp.entity.property.PropertyType;
 import com.propertyapp.mapper.PropertyMapper;
@@ -37,7 +39,7 @@ public class PropertyTypeService {
     })
     public PropertyTypeDTO createType(PropertyTypeDTO dto) {
         if (typeRepo.existsByName(dto.getName()))
-            throw new RuntimeException("Property type already exists");
+            throw new DuplicateResourceException("PropertyType", "name", dto.getName());
 
         PropertyType type = PropertyType.builder()
                 .name(dto.getName())
@@ -55,7 +57,7 @@ public class PropertyTypeService {
     })
     public PropertyTypeDTO updateType(Long id, PropertyTypeDTO dto) {
         PropertyType type = typeRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Type not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", id));
 
         type.setName(dto.getName());
         type.setDescription(dto.getDescription());
@@ -69,7 +71,7 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", allEntries = true)
     public PropertyTypeDTO updateDisplayOrder(Long id, Integer order) {
         PropertyType type = typeRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Type not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", id));
         type.setDisplayOrder(order);
         return map(typeRepo.save(type));
     }
@@ -77,7 +79,7 @@ public class PropertyTypeService {
     @Transactional
     public void deactivateType(Long id) {
         PropertyType type = typeRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Type not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", id));
         type.setActive(false);
         typeRepo.save(type);
     }
@@ -88,10 +90,10 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", allEntries = true)
     public PropertySubTypeDTO createSubType(PropertySubTypeDTO dto) {
         PropertyType type = typeRepo.findById(dto.getPropertyTypeId())
-                .orElseThrow(() -> new RuntimeException("Type not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", dto.getPropertyTypeId()));
 
         if (subTypeRepo.existsByNameAndPropertyType(dto.getName(), type))
-            throw new RuntimeException("SubType already exists");
+            throw new DuplicateResourceException("PropertySubType", "name", dto.getName());
 
         PropertySubType subType = PropertySubType.builder()
                 .propertyType(type)
@@ -108,10 +110,10 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", allEntries = true)
     public PropertySubTypeDTO createSubType(PropertySubTypeCreateRequest request) {
         PropertyType propertyType = typeRepo.findById(request.getPropertyTypeId())
-                .orElseThrow(() -> new RuntimeException("Property type not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", request.getPropertyTypeId()));
 
         if (subTypeRepo.existsByNameAndPropertyType(request.getName(), propertyType))
-            throw new RuntimeException("SubType already exists");
+            throw new DuplicateResourceException("PropertySubType", "name", request.getName());
 
         Integer maxOrder = subTypeRepo.findMaxDisplayOrderByPropertyType(propertyType);
 
@@ -130,7 +132,7 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", allEntries = true)
     public PropertySubTypeDTO updateSubType(Long id, PropertySubTypeUpdateRequest request) {
         PropertySubType subType = subTypeRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("SubType not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertySubType", "id", id));
 
         subType.setName(request.getName());
         subType.setDescription(request.getDescription());
@@ -144,7 +146,7 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", allEntries = true)
     public PropertySubTypeDTO updateSubTypeOrder(Long id, Integer displayOrder) {
         PropertySubType subType = subTypeRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("SubType not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertySubType", "id", id));
         subType.setDisplayOrder(displayOrder);
         return propertyMapper.toSubTypeDTO(subTypeRepo.save(subType));
     }
@@ -152,7 +154,7 @@ public class PropertyTypeService {
     @Transactional
     public void deactivateSubType(Long id) {
         PropertySubType subType = subTypeRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("SubType not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("PropertySubType", "id", id));
         subType.setActive(false);
         subTypeRepo.save(subType);
     }
@@ -163,7 +165,7 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", key = "'amenities'")
     public PropertyAmenityDTO createAmenity(PropertyAmenityDTO dto) {
         if (amenityRepo.existsByName(dto.getName()))
-            throw new RuntimeException("Amenity already exists");
+            throw new DuplicateResourceException("PropertyAmenity", "name", dto.getName());
 
         Integer maxOrder = amenityRepo.findMaxDisplayOrderByCategory(dto.getCategory());
 
@@ -182,7 +184,7 @@ public class PropertyTypeService {
     @CacheEvict(value = "propertyTypes", key = "'amenities'")
     public PropertyAmenityDTO createAmenity(PropertyAmenityCreateRequest request) {
         if (amenityRepo.existsByName(request.getName()))
-            throw new RuntimeException("Amenity already exists");
+            throw new DuplicateResourceException("PropertyAmenity", "name", request.getName());
 
         Integer maxOrder = amenityRepo.findMaxDisplayOrderByCategory(request.getCategory());
 
@@ -210,12 +212,30 @@ public class PropertyTypeService {
     }
 
     @Transactional(readOnly = true)
+    public List<PropertyTypeDTO> getAllPropertyTypesAdmin() {
+        log.info("Fetching all property types (admin — includes inactive)");
+        return typeRepo.findAllByOrderByDisplayOrderAsc()
+                .stream()
+                .map(propertyMapper::toTypeDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     @Cacheable(value = "propertyTypes", key = "'amenities'")
     public List<PropertyAmenityDTO> getAllAmenities() {
         log.info("Fetching all property amenities");
         return amenityRepo.findByIsActiveTrueOrderByDisplayOrder()
                 .stream()
                 .map(propertyMapper::toAmenityDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PropertyAmenityDTO> getAllAmenitiesAdmin() {
+        log.info("Fetching all property amenities (admin — includes inactive)");
+        return amenityRepo.findAllByOrderByDisplayOrderAsc()
+                .stream()
+                .map(this::map)
                 .collect(Collectors.toList());
     }
 

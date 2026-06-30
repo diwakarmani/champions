@@ -222,6 +222,7 @@ public class AuthServiceImpl implements AuthService {
                     .expiresIn(86400L) // 24 hours
                     .id(user.getId())
                     .email(user.getEmail())
+                    .phone(user.getPhone())
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
                     .roles(user.getRoles().stream().map(Role::getName).toList())
@@ -283,6 +284,7 @@ public class AuthServiceImpl implements AuthService {
                     .expiresIn(86400L) // 24 hours
                     .id(user.getId())
                     .email(user.getEmail())
+                    .phone(user.getPhone())
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
                     .roles(user.getRoles().stream().map(Role::getName).toList())
@@ -292,7 +294,7 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             // Increment failed login attempts
             user.incrementFailedLoginAttempts();
-            
+
             // Lock account after 5 failed attempts
             if (user.getFailedLoginAttempts() >= 5) {
                 user.setLocked(true);
@@ -407,11 +409,48 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         
         tokenRepository.save(resetToken);
-        
-        // TODO: Send password reset email
-        log.info("Password reset token generated for: {}", email);
+
+        String htmlContent = buildPasswordResetEmailTemplate(user.getFirstName(), token);
+        emailService.sendEmail(
+                user.getEmail(),
+                "Reset Your Password - PropertyApp",
+                htmlContent
+        );
+
+        log.info("Password reset email triggered for: {}", email);
     }
     
+    private String buildPasswordResetEmailTemplate(String firstName, String token) {
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+        </head>
+        <body style="font-family: Arial, sans-serif; background-color: #f4f6f8; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 30px; border-radius: 8px;">
+                <h2 style="color: #2c3e50;">Reset Your Password</h2>
+                <p>Hi %s,</p>
+                <p>We received a request to reset your password. Use the code below in the app to set a new password:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px;
+                                background: #f4f6f8; padding: 16px 24px; border-radius: 8px;
+                                display: inline-block; color: #7C3AED;">
+                        %s
+                    </div>
+                </div>
+                <p>This code will expire in <strong>1 hour</strong>.</p>
+                <p>If you did not request a password reset, please ignore this email.</p>
+                <hr/>
+                <p style="font-size: 12px; color: gray;">
+                    © %d PropertyApp
+                </p>
+            </div>
+        </body>
+        </html>
+        """.formatted(firstName, token, LocalDateTime.now().getYear());
+    }
+
     @Override
     @Transactional
     public void resetPassword(PasswordResetRequest request) {

@@ -30,11 +30,17 @@ public interface OtpTokenRepository extends JpaRepository<OtpToken, Long> {
     @Query("DELETE FROM OtpToken o WHERE o.expiresAt < :now")
     int deleteExpiredOtps(@Param("now") LocalDateTime now);
     
-    // Count OTPs sent in last N minutes (rate limiting)
+    // Count OTPs sent in last N minutes (rate limiting per identifier)
     @Query("SELECT COUNT(o) FROM OtpToken o WHERE o.identifier = :identifier " +
            "AND o.createdAt > :since")
-    long countRecentOtps(@Param("identifier") String identifier, 
-                        @Param("since") LocalDateTime since);
+    long countRecentOtps(@Param("identifier") String identifier,
+                         @Param("since") LocalDateTime since);
+
+    // Count all OTPs sent from a given IP in the last window (rate limiting per IP)
+    @Query("SELECT COUNT(o) FROM OtpToken o WHERE o.ipAddress = :ipAddress " +
+           "AND o.createdAt > :since")
+    long countRecentOtpsByIp(@Param("ipAddress") String ipAddress,
+                             @Param("since") LocalDateTime since);
     
     // Check if valid OTP exists
     boolean existsByIdentifierAndOtpCodeAndIsVerifiedFalseAndExpiresAtAfter(

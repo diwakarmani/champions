@@ -2,11 +2,9 @@ package com.propertyapp.service.auth;
 
 import com.propertyapp.dto.auth.*;
 import com.propertyapp.entity.auth.OtpToken;
-import com.propertyapp.entity.user.Role;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.exception.*;
 import com.propertyapp.repository.auth.OtpTokenRepository;
-import com.propertyapp.repository.user.RoleRepository;
 import com.propertyapp.repository.user.UserRepository;
 import com.propertyapp.security.CustomUserDetails;
 import com.propertyapp.security.JwtTokenProvider;
@@ -20,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
@@ -30,7 +27,6 @@ public class OtpServiceImpl implements OtpService {
 
     private final OtpTokenRepository otpTokenRepository;
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
     private final SmsService smsService;
     private final EmailService emailService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -57,8 +53,8 @@ public class OtpServiceImpl implements OtpService {
         String identifierType = detectIdentifierType(identifier);
 
         // Reject unknown identifiers — prevents OTP codes from being issued to
-        // non-existent accounts (typo emails would otherwise create shadow BUYER accounts
-        // via verifyOtp → createUserFromOtp).
+        // non-existent accounts (typo emails would otherwise allow login via a
+        // non-existent account).
         if (userRepository.findByEmailOrPhone(identifier, identifier).isEmpty()) {
             throw new UnauthorizedException(
                     "No account found for " + identifier + ". Please register first.");
@@ -90,30 +86,37 @@ public class OtpServiceImpl implements OtpService {
 
         otpTokenRepository.save(otpToken);
 
-        // Send OTP
-        try {
-            if ("EMAIL".equals(identifierType)) {
-               emailService.sendOtpEmail(identifier, otpCode);
-            } else if ("MOBILE".equals(identifierType)) {
-                smsService.sendOtpSms(identifier, otpCode);
-            }
-        } catch (Exception e) {
-            log.error("Failed to send OTP: {}", e.getMessage());
-            throw new UnableToSendNotificationException("Failed to send OTP. Please try again.");
+        // Dev mode: fixed code is already known — skip delivery to avoid spurious errors
+        // when Twilio/SMTP credentials are not configured locally.
+        if (devFixedCode != null && !devFixedCode.isBlank()) {
+            log.info("DEV mode: OTP delivery skipped for '{}' (fixed code active)", identifier);
+            return buildSendResponse(identifier, identifierType);
+        }
+
+        // Both send methods are @Async — they execute on a background thread and return
+        // immediately, so no exception can propagate here. Delivery failures are logged
+        // inside each service method. This is intentional fire-and-forget behaviour.
+        if ("EMAIL".equals(identifierType)) {
+            emailService.sendOtpEmail(identifier, otpCode);
+        } else if ("MOBILE".equals(identifierType)) {
+            smsService.sendOtpSms(identifier, otpCode);
         }
 
         log.info("OTP sent successfully to: {}", identifier);
+        return buildSendResponse(identifier, identifierType);
+    }
 
+    private OtpSendResponse buildSendResponse(String identifier, String identifierType) {
         return OtpSendResponse.builder()
                 .identifier(maskIdentifier(identifier, identifierType))
                 .identifierType(identifierType)
-                .expiresIn(OTP_EXPIRY_MINUTES * 60) // seconds
+                .expiresIn(OTP_EXPIRY_MINUTES * 60)
                 .message("OTP sent successfully")
                 .build();
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BadRequestException.class)
     public OtpVerificationResponse verifyOtp(OtpVerificationRequest request) {
         log.info("Verifying OTP for: {}", request.getIdentifier());
 
@@ -151,9 +154,12 @@ public class OtpServiceImpl implements OtpService {
         otpToken.verify();
         otpTokenRepository.save(otpToken);
 
-        // Find or create user
+        // Account must exist — sendOtp already rejected unknown identifiers.
+        // Using orElseThrow (not orElseGet) so a deleted-then-OTP-replayed account
+        // cannot be silently resurrected as a new User record.
         User user = userRepository.findByEmailOrPhone(identifier, identifier)
-                .orElseGet(() -> createUserFromOtp(identifier, otpToken.getIdentifierType()));
+                .orElseThrow(() -> new UnauthorizedException(
+                        "No account found for this identifier. Please register first."));
 
         // Make sure user is active
         if (!user.isActive()) {
@@ -174,7 +180,7 @@ public class OtpServiceImpl implements OtpService {
                 .expiresIn(86400L) // 24 hours
                 .id(user.getId())
                 .email(user.getEmail())
-                .mobile(user.getPhone())
+                .phone(user.getPhone())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .roles(user.getRoles().stream().map(role -> role.getName()).toList())
@@ -212,6 +218,84 @@ public class OtpServiceImpl implements OtpService {
         log.info("Cleaning up expired OTPs");
         int deleted = otpTokenRepository.deleteExpiredOtps(LocalDateTime.now());
         log.info("Deleted {} expired OTPs", deleted);
+    }
+
+    private static final int MAX_OTP_PER_HOUR_PER_IP = 20;
+
+    @Override
+    @Transactional
+    public void sendContactChangeOtp(String newContact, String ipAddress) {
+        String identifierType = detectIdentifierType(newContact);
+
+        // Per-identifier cap: prevents hammering one specific contact
+        long recentOtps = otpTokenRepository.countRecentOtps(
+                newContact, LocalDateTime.now().minusMinutes(RATE_LIMIT_MINUTES));
+        if (recentOtps >= MAX_OTP_PER_HOUR) {
+            throw new BadRequestException("Too many OTP requests. Please try again later.");
+        }
+
+        // Per-IP cap: prevents an authenticated user from using different contact values
+        // to send unlimited OTPs to arbitrary phone numbers / email addresses.
+        if (ipAddress != null && !ipAddress.isBlank()) {
+            long recentByIp = otpTokenRepository.countRecentOtpsByIp(
+                    ipAddress, LocalDateTime.now().minusMinutes(RATE_LIMIT_MINUTES));
+            if (recentByIp >= MAX_OTP_PER_HOUR_PER_IP) {
+                throw new BadRequestException("Too many OTP requests from this device. Please try again later.");
+            }
+        }
+
+        String otpCode = generateOtp();
+        otpTokenRepository.expirePendingOtps(newContact, LocalDateTime.now().minusSeconds(1));
+
+        OtpToken token = OtpToken.builder()
+                .identifier(newContact)
+                .identifierType(identifierType)
+                .otpCode(otpCode)
+                .ipAddress(ipAddress)
+                .build();
+        otpTokenRepository.save(token);
+
+        if (devFixedCode != null && !devFixedCode.isBlank()) {
+            log.info("DEV mode: contact-change OTP skipped for '{}' (fixed code active)", newContact);
+            return;
+        }
+
+        if ("EMAIL".equals(identifierType)) {
+            emailService.sendOtpEmail(newContact, otpCode);
+        } else {
+            smsService.sendOtpSms(newContact, otpCode);
+        }
+
+        log.info("Contact-change OTP sent to: {}", newContact);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = BadRequestException.class)
+    public void verifyContactChangeOtp(String newContact, String otpCode) {
+        OtpToken token = otpTokenRepository
+                .findFirstByIdentifierAndIsVerifiedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
+                        newContact, LocalDateTime.now())
+                .orElseThrow(() -> new BadRequestException("Invalid or expired OTP"));
+
+        if (token.isMaxAttemptsReached()) {
+            throw new BadRequestException("Maximum attempts reached. Please request a new OTP.");
+        }
+
+        if (token.isExpired()) {
+            throw new BadRequestException("OTP has expired. Please request a new one.");
+        }
+
+        if (!token.getOtpCode().equals(otpCode)) {
+            token.incrementAttempts();
+            otpTokenRepository.save(token);
+            int remaining = token.getMaxAttempts() - token.getAttempts();
+            throw new BadRequestException(
+                    String.format("Invalid OTP. %d attempts remaining.", remaining));
+        }
+
+        token.verify();
+        otpTokenRepository.save(token);
+        log.info("Contact-change OTP verified for: {}", newContact);
     }
 
     // Helper methods
@@ -256,28 +340,4 @@ public class OtpServiceImpl implements OtpService {
         return identifier;
     }
 
-    private User createUserFromOtp(String identifier, String identifierType) {
-        User user = new User();
-
-        if ("EMAIL".equals(identifierType)) {
-            user.setEmail(identifier);
-            user.setEmailVerified(true);
-            user.setFirstName("User");
-            user.setLastName(identifier.split("@")[0]);
-        } else if ("MOBILE".equals(identifierType)) {
-            user.setPhone(identifier);
-            user.setMobileVerified(true);
-            user.setEmail(identifier + "@temp.com");
-            user.setFirstName("User");
-            user.setLastName(identifier.substring(Math.max(0, identifier.length() - 4)));
-        }
-
-        user.setActive(true);
-        user.setPasswordHash("OTP_USER_" + UUID.randomUUID());
-
-        roleRepository.findByName("BUYER").ifPresent(buyerRole ->
-                user.getRoles().add(buyerRole));
-
-        return userRepository.save(user);
-    }
 }
