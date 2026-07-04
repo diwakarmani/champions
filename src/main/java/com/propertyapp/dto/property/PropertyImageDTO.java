@@ -1,6 +1,7 @@
 package com.propertyapp.dto.property;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
@@ -19,5 +20,6 @@ public class PropertyImageDTO {
     private String thumbnailUrl;
     private String caption;
     private Integer displayOrder;
+    @JsonProperty("isPrimary")
     private boolean isPrimary;
 }
