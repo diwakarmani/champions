@@ -82,4 +82,11 @@ public interface PropertyRepository extends JpaRepository<Property, Long>,
 
     @Query("SELECT COUNT(p) FROM Property p WHERE p.createdAt > :since AND p.deletedAt IS NULL")
     long countCreatedAfter(@Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.owner.id = :ownerId AND p.title = :title " +
+           "AND p.createdAt > :since AND p.deletedAt IS NULL")
+    long countByOwnerIdAndTitleAndCreatedAtAfterAndDeletedAtIsNull(
+            @Param("ownerId") Long ownerId,
+            @Param("title") String title,
+            @Param("since") java.time.LocalDateTime since);
 }

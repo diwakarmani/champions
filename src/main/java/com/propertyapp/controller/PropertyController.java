@@ -238,10 +238,10 @@ public class PropertyController {
     }
 
     @PostMapping("/{id}/reveal-contact")
-    @PreAuthorize("hasRole('BUYER')")
+    @PreAuthorize("hasAnyRole('BUYER','REALTOR')")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Reveal owner contact details (BUYER only)",
-               description = "BUYER can reveal masked contact info; increments contactCount and notifies owner on first reveal")
+    @Operation(summary = "Reveal owner contact details (BUYER or REALTOR)",
+               description = "BUYER or REALTOR can reveal masked contact info (realtors may contact other realtors' listings, e.g. co-brokerage/referrals); increments contactCount and notifies owner on first reveal. Rejected if the caller owns the listing.")
     public ResponseEntity<ApiResponse<ContactRevealResponse>> revealContact(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("Authentication required"));

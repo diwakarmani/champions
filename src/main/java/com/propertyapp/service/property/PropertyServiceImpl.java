@@ -9,6 +9,7 @@ import com.propertyapp.entity.property.*;
 import com.propertyapp.entity.property.PropertyContactEvent;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.exception.BadRequestException;
+import com.propertyapp.exception.DuplicateResourceException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.exception.UnauthorizedException;
 import com.propertyapp.mapper.PropertyMapper;
@@ -96,6 +97,17 @@ private final PropertyContactEventRepository contactEventRepository;
                         "Selected PropertySubType does not belong to PropertyType"
                 );
             }
+        }
+
+        // Defense-in-depth against double-submit: the client already guards against a
+        // double-tap, but two independent near-simultaneous requests (e.g. a client retry
+        // outside this guard) can still both pass validation and insert. Reject an exact
+        // repeat of the same owner+title within a short window instead of creating a second row.
+        long recentDuplicates = propertyRepository.countByOwnerIdAndTitleAndCreatedAtAfterAndDeletedAtIsNull(
+                ownerId, request.getTitle(), LocalDateTime.now().minusSeconds(10));
+        if (recentDuplicates > 0) {
+            throw new DuplicateResourceException(
+                    "A listing with this title was already submitted moments ago. Check My Listings before submitting again.");
         }
 
         Property property = propertyMapper.toEntity(request);
@@ -673,6 +685,9 @@ private final PropertyContactEventRepository contactEventRepository;
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", propertyId));
 
         User owner = property.getOwner();
+        if (owner.getId().equals(userId)) {
+            throw new BadRequestException("You cannot reveal contact details on your own listing");
+        }
         boolean alreadyContacted = contactEventRepository.existsByPropertyIdAndContactedById(propertyId, userId);
 
         if (!alreadyContacted) {
@@ -687,7 +702,7 @@ private final PropertyContactEventRepository contactEventRepository;
             property.incrementContactCount();
             propertyRepository.save(property);
 
-            // Auto-create an inquiry so this buyer can rate the realtor later.
+            // Auto-create an inquiry so the contacting user can rate the owner later.
             // Skip if they already sent a formal inquiry for this property.
             if (!inquiryRepository.existsByProperty_IdAndInquirer_Id(propertyId, userId)) {
                 Inquiry autoInquiry = Inquiry.builder()

@@ -61,6 +61,10 @@ public class InquiryController {
         User inquirer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        if (property.getOwner().getId().equals(userId)) {
+            throw new BadRequestException("You cannot send an inquiry on your own listing");
+        }
+
         property.incrementInquiryCount();
 
         Inquiry inquiry = Inquiry.builder()

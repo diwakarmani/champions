@@ -5,6 +5,7 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -51,6 +52,8 @@ public class EmailService {
             mailSender.send(message);
             log.info("OTP email sent successfully to: {}", email);
 
+        } catch (MailAuthenticationException e) {
+            log.error("SMTP authentication failed sending OTP email to {} — check MAIL_USERNAME/MAIL_PASSWORD: {}", email, e.getMessage());
         } catch (Exception e) {
             log.error("Failed to send OTP email to {}: {}", email, e.getMessage());
         }
@@ -73,6 +76,8 @@ public class EmailService {
             mailSender.send(message);
             log.info("Email sent successfully to: {}", to);
 
+        } catch (MailAuthenticationException e) {
+            log.error("SMTP authentication failed sending email to {} — check MAIL_USERNAME/MAIL_PASSWORD: {}", to, e.getMessage());
         } catch (Exception e) {
             log.error("Failed to send email to {}: {}", to, e.getMessage());
         }

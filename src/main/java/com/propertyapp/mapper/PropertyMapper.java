@@ -55,14 +55,21 @@ public interface PropertyMapper {
     List<PropertyImageDTO> toImageDTOList(List<PropertyImage> entities);
     
     // PropertyType mappings
+    // isActive needs an explicit mapping: the entity's Lombok-generated getter is isActive(),
+    // which JavaBean introspection (and MapStruct's implicit matching) resolves to property
+    // name "active" — it silently fails to match the DTO's "isActive" property otherwise
+    // (unmappedTargetPolicy = IGNORE swallows the mismatch instead of failing the build).
     @Mapping(target = "subTypes", source = "subTypes")
+    @Mapping(target = "isActive", source = "active")
     PropertyTypeDTO toTypeDTO(PropertyType entity);
-    
+
     List<PropertyTypeDTO> toTypeDTOList(List<PropertyType> entities);
-    
+
+    @Mapping(target = "isActive", source = "active")
     PropertySubTypeDTO toSubTypeDTO(PropertySubType entity);
-    
+
     // PropertyAmenity mappings
+    @Mapping(target = "isActive", source = "active")
     PropertyAmenityDTO toAmenityDTO(PropertyAmenity entity);
     
     List<PropertyAmenityDTO> toAmenityDTOList(List<PropertyAmenity> entities);
