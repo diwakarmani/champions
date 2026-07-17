@@ -49,7 +49,12 @@ public interface PropertyMapper {
     // PropertyImage mappings
     @Mapping(target = "property", ignore = true)
     PropertyImage toImageEntity(PropertyImageDTO dto);
-    
+
+    // isPrimary needs an explicit mapping: the entity's Lombok-generated getter is isPrimary(),
+    // which JavaBean introspection (and MapStruct's implicit matching) resolves to property
+    // name "primary" — it silently fails to match the DTO's "isPrimary" property otherwise
+    // (unmappedTargetPolicy = IGNORE swallows the mismatch instead of failing the build).
+    @Mapping(target = "isPrimary", source = "primary")
     PropertyImageDTO toImageDTO(PropertyImage entity);
     
     List<PropertyImageDTO> toImageDTOList(List<PropertyImage> entities);

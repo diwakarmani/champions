@@ -80,4 +80,32 @@ public class AdminPropertyConfigController {
         return ResponseEntity.ok(ApiResponse.success("Amenity created",
                 propertyTypeService.createAmenity(dto)));
     }
+
+    @PutMapping("/amenities/{id}")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Update property amenity")
+    public ResponseEntity<ApiResponse<PropertyAmenityDTO>> updateAmenity(
+            @PathVariable Long id,
+            @RequestBody PropertyAmenityDTO dto) {
+        return ResponseEntity.ok(ApiResponse.success("Amenity updated",
+                propertyTypeService.updateAmenity(id, dto)));
+    }
+
+    @DeleteMapping("/types/{id}")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Delete (deactivate) a property type",
+               description = "Soft-deletes by setting isActive=false, so it drops out of public-facing lists without breaking the historical propertyTypeId reference on existing properties.")
+    public ResponseEntity<ApiResponse<Void>> deleteType(@PathVariable Long id) {
+        propertyTypeService.deactivateType(id);
+        return ResponseEntity.ok(ApiResponse.success("Type deleted", null));
+    }
+
+    @DeleteMapping("/amenities/{id}")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "Delete (deactivate) a property amenity",
+               description = "Soft-deletes by setting isActive=false, so it drops out of public-facing lists without breaking existing properties' amenity associations.")
+    public ResponseEntity<ApiResponse<Void>> deleteAmenity(@PathVariable Long id) {
+        propertyTypeService.deactivateAmenity(id);
+        return ResponseEntity.ok(ApiResponse.success("Amenity deleted", null));
+    }
 }

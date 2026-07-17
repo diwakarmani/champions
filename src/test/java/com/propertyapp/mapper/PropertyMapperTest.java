@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.propertyapp.dto.property.PropertyDTO;
 import com.propertyapp.entity.property.Property;
 import com.propertyapp.entity.property.PropertyAmenity;
+import com.propertyapp.entity.property.PropertyImage;
 import com.propertyapp.entity.property.PropertySubType;
 import com.propertyapp.entity.property.PropertyType;
 import com.propertyapp.entity.user.User;
@@ -91,5 +92,21 @@ class PropertyMapperTest {
 
         assertThat(mapper.toAmenityDTO(active).getIsActive()).isTrue();
         assertThat(mapper.toAmenityDTO(inactive).getIsActive()).isFalse();
+    }
+
+    // Bug E (2026-07-16): PropertyImage declares its entity field as `isPrimary` (Lombok's
+    // boolean-getter convention resolves the JavaBean property name to "primary"), so the mapper
+    // needs an explicit source="primary" mapping — same class of gap as Bug 12, just a different
+    // entity. Without it, toImageDTO always returned isPrimary:false regardless of the DB value.
+    @Test
+    void mapsPrimaryImageCorrectlyToIsPrimaryTrue() {
+        PropertyImage image = PropertyImage.builder().imageUrl("http://example.com/a.jpg").isPrimary(true).build();
+        assertThat(mapper.toImageDTO(image).isPrimary()).isTrue();
+    }
+
+    @Test
+    void mapsNonPrimaryImageCorrectlyToIsPrimaryFalse() {
+        PropertyImage image = PropertyImage.builder().imageUrl("http://example.com/b.jpg").isPrimary(false).build();
+        assertThat(mapper.toImageDTO(image).isPrimary()).isFalse();
     }
 }

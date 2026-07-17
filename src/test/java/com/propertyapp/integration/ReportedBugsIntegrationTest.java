@@ -291,6 +291,121 @@ class ReportedBugsIntegrationTest {
      * returned isActive:null regardless of the true value. This test hits the LIST endpoints
      * themselves, which the old coverage never did.
      */
+    // ── Net-new: Property Type delete + Amenity edit/delete (endpoints did not exist at all
+    // before this pass — the service layer already had unwired deactivateType/deactivateSubType
+    // methods, but no controller endpoint called them, and no update/deactivate methods existed
+    // for amenities at all) ──
+
+    @Test
+    void deletingATypeDeactivatesItAndRemovesItFromThePublicList() throws Exception {
+        String typeName = "DelType" + UUID.randomUUID().toString().substring(0, 8);
+        MvcResult created = mockMvc.perform(post("/api/admin/property-config/types")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","description":"Delete-type regression","isActive":true}
+                                """.formatted(typeName)))
+                .andExpect(status().isOk())
+                .andReturn();
+        long typeId = objectMapper.readTree(created.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        mockMvc.perform(get("/api/property-types"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)]".formatted(typeId)).exists());
+
+        mockMvc.perform(delete("/api/admin/property-config/types/{id}", typeId)
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/property-config/types")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)].isActive".formatted(typeId), hasItem(false)));
+
+        mockMvc.perform(get("/api/property-types"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)]".formatted(typeId)).doesNotExist());
+    }
+
+    @Test
+    void updatingAnAmenityPersistsTheChangeInTheAdminList() throws Exception {
+        String amenityName = "UpdAmenity" + UUID.randomUUID().toString().substring(0, 8);
+        MvcResult created = mockMvc.perform(post("/api/admin/property-config/amenities")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","category":"Original","isActive":true}
+                                """.formatted(amenityName)))
+                .andExpect(status().isOk())
+                .andReturn();
+        long amenityId = objectMapper.readTree(created.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        String renamed = amenityName + "-Renamed";
+        mockMvc.perform(put("/api/admin/property-config/amenities/{id}", amenityId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","category":"Updated","isActive":true}
+                                """.formatted(renamed)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value(renamed))
+                .andExpect(jsonPath("$.data.category").value("Updated"));
+
+        mockMvc.perform(get("/api/admin/property-config/amenities")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)].name".formatted(amenityId), hasItem(renamed)));
+    }
+
+    @Test
+    void deletingAnAmenityDeactivatesItAndRemovesItFromThePublicList() throws Exception {
+        String amenityName = "DelAmenity" + UUID.randomUUID().toString().substring(0, 8);
+        MvcResult created = mockMvc.perform(post("/api/admin/property-config/amenities")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","category":"ToDelete","isActive":true}
+                                """.formatted(amenityName)))
+                .andExpect(status().isOk())
+                .andReturn();
+        long amenityId = objectMapper.readTree(created.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        mockMvc.perform(get("/api/property-types/amenities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)]".formatted(amenityId)).exists());
+
+        mockMvc.perform(delete("/api/admin/property-config/amenities/{id}", amenityId)
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/property-config/amenities")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)].isActive".formatted(amenityId), hasItem(false)));
+
+        mockMvc.perform(get("/api/property-types/amenities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)]".formatted(amenityId)).doesNotExist());
+    }
+
+    @Test
+    void nonAdminCannotDeleteTypesOrAmenities() throws Exception {
+        String typeName = "GuardType" + UUID.randomUUID().toString().substring(0, 8);
+        MvcResult created = mockMvc.perform(post("/api/admin/property-config/types")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","isActive":true}
+                                """.formatted(typeName)))
+                .andExpect(status().isOk())
+                .andReturn();
+        long typeId = objectMapper.readTree(created.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        mockMvc.perform(delete("/api/admin/property-config/types/{id}", typeId)
+                        .header("Authorization", bearer(realtorToken)))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     void adminTypeListReflectsDeactivatedStateNotJustTheSinglePutResponse() throws Exception {
         String typeName = "B12Admin" + UUID.randomUUID().toString().substring(0, 8);
@@ -1016,6 +1131,46 @@ class ReportedBugsIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(propertyPayloadWithExactTitle(typeId, localityId, sharedTitle)))
                 .andExpect(status().isCreated());
+    }
+
+    /**
+     * Bug E — same MapStruct silent-mapping-gap pattern as Bug 12: PropertyMapper.toImageDTO had
+     * no explicit @Mapping for isPrimary (entity getter isPrimary() resolves to JavaBean property
+     * "primary", not "isPrimary"), so GET /api/properties/{id}/images — the LIST endpoint used by
+     * PropertyImagesScreen — always returned isPrimary:false regardless of the true DB value. This
+     * test hits that LIST endpoint directly, which is exactly where the bug hid.
+     */
+    @Test
+    void propertyImagesListReflectsPrimaryFlagCorrectly() throws Exception {
+        long typeId = propertyTypeRepository.findAll().getFirst().getId();
+        long localityId = localityRepository.findAll().getFirst().getId();
+        JsonNode property = createProperty(typeId, localityId, "Primary Image Target");
+        long propertyId = property.at("/data/id").asLong();
+
+        MvcResult primaryResult = mockMvc.perform(post("/api/properties/{id}/images", propertyId)
+                        .header("Authorization", bearer(sellerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"imageUrl":"http://example.com/primary.jpg","isPrimary":true}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long primaryImageId = objectMapper.readTree(primaryResult.getResponse().getContentAsString())
+                .at("/data/id").asLong();
+
+        mockMvc.perform(post("/api/properties/{id}/images", propertyId)
+                        .header("Authorization", bearer(sellerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"imageUrl":"http://example.com/secondary.jpg","isPrimary":false}
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/properties/{id}/images", propertyId)
+                        .header("Authorization", bearer(sellerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)].isPrimary".formatted(primaryImageId), hasItem(true)))
+                .andExpect(jsonPath("$.data[?(@.id != %d)].isPrimary".formatted(primaryImageId), hasItem(false)));
     }
 
     private String propertyPayloadWithExactTitle(long typeId, long localityId, String exactTitle) throws Exception {

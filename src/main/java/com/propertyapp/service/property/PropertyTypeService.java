@@ -77,6 +77,7 @@ public class PropertyTypeService {
     }
 
     @Transactional
+    @CacheEvict(value = "propertyTypes", allEntries = true)
     public void deactivateType(Long id) {
         PropertyType type = typeRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", id));
@@ -152,6 +153,7 @@ public class PropertyTypeService {
     }
 
     @Transactional
+    @CacheEvict(value = "propertyTypes", allEntries = true)
     public void deactivateSubType(Long id) {
         PropertySubType subType = subTypeRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PropertySubType", "id", id));
@@ -178,6 +180,30 @@ public class PropertyTypeService {
                 .build();
 
         return map(amenityRepo.save(amenity));
+    }
+
+    @Transactional
+    @CacheEvict(value = "propertyTypes", key = "'amenities'")
+    public PropertyAmenityDTO updateAmenity(Long id, PropertyAmenityDTO dto) {
+        PropertyAmenity amenity = amenityRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyAmenity", "id", id));
+
+        amenity.setName(dto.getName());
+        amenity.setIconClass(dto.getIconClass());
+        amenity.setCategory(dto.getCategory());
+        if (dto.getDisplayOrder() != null) amenity.setDisplayOrder(dto.getDisplayOrder());
+        if (dto.getIsActive() != null) amenity.setActive(dto.getIsActive());
+
+        return map(amenityRepo.save(amenity));
+    }
+
+    @Transactional
+    @CacheEvict(value = "propertyTypes", key = "'amenities'")
+    public void deactivateAmenity(Long id) {
+        PropertyAmenity amenity = amenityRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PropertyAmenity", "id", id));
+        amenity.setActive(false);
+        amenityRepo.save(amenity);
     }
 
     @Transactional
