@@ -472,15 +472,27 @@ private void importLocalitiesFromOverpass(City city) {
     @Transactional
     public void importCountry(String countryName) {
 
+        // Matched only on the exact "name" tag previously — OSM often tags a country's common
+        // name under "name:en" or "int_name" instead (e.g. the US relation's "name" is
+        // "United States", not "USA"), which made an exact-name search fail for any input that
+        // didn't happen to match OSM's primary tag verbatim. Union across the common alternates.
+        // The name is escaped before splicing into the query string literal — unescaped, a name
+        // containing a literal `"` would produce syntactically invalid Overpass QL.
         String query = """
         [out:json][timeout:120];
-        relation["boundary"="administrative"]
-                ["admin_level"="2"]
-                ["name"="%s"];
+        (
+          relation["boundary"="administrative"]["admin_level"="2"]["name"="%1$s"];
+          relation["boundary"="administrative"]["admin_level"="2"]["name:en"="%1$s"];
+          relation["boundary"="administrative"]["admin_level"="2"]["int_name"="%1$s"];
+        );
         out ids tags center;
-    """.formatted(countryName);
+    """.formatted(escapeOverpassString(countryName));
 
         Map<String, Object> body = callOverpass(query);
+
+        if (body == null || !body.containsKey("elements")) {
+            throw new BadRequestException("Country not found (no response from location provider)");
+        }
 
         List<Map<String, Object>> elements =
                 (List<Map<String, Object>>) body.get("elements");
@@ -527,6 +539,10 @@ private void importLocalitiesFromOverpass(City city) {
     """.formatted(areaId);
 
         Map<String, Object> body = callOverpass(query);
+
+        if (body == null || !body.containsKey("elements")) {
+            throw new BadRequestException("No states returned by location provider for this country");
+        }
 
         List<Map<String, Object>> elements =
                 (List<Map<String, Object>>) body.get("elements");
@@ -633,6 +649,12 @@ public void importCities(Long stateId) {
                 .body("data=" + encoded)
                 .retrieve()
                 .body(Map.class);
+    }
+
+    // Escapes backslash and double-quote so a name containing either can't break out of the
+    // Overpass QL string literal it's spliced into (e.g. `["name"="%s"]`).
+    private String escapeOverpassString(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     @Transactional(readOnly = true)
