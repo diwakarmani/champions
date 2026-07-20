@@ -1,6 +1,7 @@
 package com.propertyapp.service.auth;
 
 import com.propertyapp.dto.auth.*;
+import com.propertyapp.enums.ClientType;
 import com.propertyapp.entity.auth.OtpToken;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.exception.*;
@@ -117,7 +118,7 @@ public class OtpServiceImpl implements OtpService {
 
     @Override
     @Transactional(noRollbackFor = BadRequestException.class)
-    public OtpVerificationResponse verifyOtp(OtpVerificationRequest request) {
+    public OtpVerificationResponse verifyOtp(OtpVerificationRequest request, ClientType clientType) {
         log.info("Verifying OTP for: {}", request.getIdentifier());
 
         String identifier = request.getIdentifier().trim();
@@ -169,7 +170,7 @@ public class OtpServiceImpl implements OtpService {
         // ✅ FIXED: Create CustomUserDetails and generate JWT token
         CustomUserDetails userDetails = new CustomUserDetails(user);
         String accessToken = jwtTokenProvider.generateToken(userDetails);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails, clientType);
 
         log.info("OTP verification successful for: {}", identifier);
 

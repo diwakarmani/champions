@@ -14,6 +14,7 @@ public class JwtConfig {
     private String secret;
     private long expiration;
     private long refreshExpiration;
+    private long refreshExpirationMobile;
     private String header = "Authorization";
     private String prefix = "Bearer ";
 }

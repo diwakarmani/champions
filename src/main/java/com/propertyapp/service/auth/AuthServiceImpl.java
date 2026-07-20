@@ -1,6 +1,7 @@
 package com.propertyapp.service.auth;
 
 import com.propertyapp.dto.auth.*;
+import com.propertyapp.enums.ClientType;
 import com.propertyapp.entity.user.Role;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.entity.user.VerificationToken;
@@ -186,7 +187,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse loginWithIdentifier(LoginRequest request) {
+    public AuthResponse loginWithIdentifier(LoginRequest request, ClientType clientType) {
         log.info("Login attempt with identifier: {}", request.getEmail());
 
         // Try to find user by email OR mobile
@@ -211,7 +212,7 @@ public class AuthServiceImpl implements AuthService {
             // Generate tokens
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
             String accessToken = jwtTokenProvider.generateToken(userDetails);
-            String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails);
+            String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails, clientType);
 
             log.info("User logged in successfully: {}", user.getEmail());
 

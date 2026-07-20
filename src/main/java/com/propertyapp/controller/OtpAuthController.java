@@ -2,7 +2,9 @@ package com.propertyapp.controller;
 
 import com.propertyapp.dto.auth.*;
 import com.propertyapp.dto.common.ApiResponse;
+import com.propertyapp.enums.ClientType;
 import com.propertyapp.service.auth.OtpService;
+import com.propertyapp.util.ClientTypeResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,9 +37,11 @@ public class OtpAuthController {
     @PostMapping("/verify")
     @Operation(summary = "Verify OTP", description = "Verify OTP and get JWT token")
     public ResponseEntity<ApiResponse<OtpVerificationResponse>> verifyOtp(
-            @Valid @RequestBody OtpVerificationRequest request
+            @Valid @RequestBody OtpVerificationRequest request,
+            HttpServletRequest httpRequest
     ) {
-        OtpVerificationResponse response = otpService.verifyOtp(request);
+        ClientType clientType = ClientTypeResolver.resolve(httpRequest);
+        OtpVerificationResponse response = otpService.verifyOtp(request, clientType);
         return ResponseEntity.ok(ApiResponse.success("Login successful", response));
     }
     

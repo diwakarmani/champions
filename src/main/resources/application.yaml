@@ -138,7 +138,8 @@ jwt:
   # Override in production with a strong 512-bit hex key
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5971}
   expiration: ${JWT_EXPIRATION:86400000}               # 24 h
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 d
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 d — web/default clients (X-Client-Type != MOBILE)
+  refresh-expiration-mobile: ${JWT_REFRESH_EXPIRATION_MOBILE:7776000000}  # ~90 d — X-Client-Type: MOBILE only
 
 # ── Application ───────────────────────────────────────────────────────────────
 app:

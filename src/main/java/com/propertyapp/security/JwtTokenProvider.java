@@ -1,6 +1,7 @@
 package com.propertyapp.security;
 
 import com.propertyapp.config.JwtConfig;
+import com.propertyapp.enums.ClientType;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -31,7 +32,17 @@ public class JwtTokenProvider {
     }
     
     public String generateRefreshToken(UserDetails userDetails) {
-        return buildToken(new HashMap<>(), userDetails, jwtConfig.getRefreshExpiration());
+        return generateRefreshToken(userDetails, ClientType.WEB);
+    }
+
+    // Mobile gets a long-lived refresh token (fewer forced re-logins); web keeps today's
+    // shorter lifetime unchanged. Callers that don't pass a ClientType (above) default to
+    // WEB, so any caller unaware of this distinction sees no behavior change.
+    public String generateRefreshToken(UserDetails userDetails, ClientType clientType) {
+        long expiration = clientType == ClientType.MOBILE
+                ? jwtConfig.getRefreshExpirationMobile()
+                : jwtConfig.getRefreshExpiration();
+        return buildToken(new HashMap<>(), userDetails, expiration);
     }
     
     private String buildToken(

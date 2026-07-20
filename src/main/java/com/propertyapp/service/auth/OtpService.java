@@ -1,18 +1,19 @@
 package com.propertyapp.service.auth;
 
 import com.propertyapp.dto.auth.*;
+import com.propertyapp.enums.ClientType;
 
 public interface OtpService {
-    
+
     /**
      * Send OTP to email or mobile (auto-detect)
      */
     OtpSendResponse sendOtp(OtpLoginRequest request, String ipAddress, String userAgent);
-    
+
     /**
      * Verify OTP and return JWT token
      */
-    OtpVerificationResponse verifyOtp(OtpVerificationRequest request);
+    OtpVerificationResponse verifyOtp(OtpVerificationRequest request, ClientType clientType);
     
     /**
      * Resend OTP

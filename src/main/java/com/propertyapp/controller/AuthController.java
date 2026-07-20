@@ -2,7 +2,9 @@ package com.propertyapp.controller;
 
 import com.propertyapp.dto.auth.*;
 import com.propertyapp.dto.common.ApiResponse;
+import com.propertyapp.enums.ClientType;
 import com.propertyapp.service.auth.AuthService;
+import com.propertyapp.util.ClientTypeResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -55,7 +57,8 @@ public class AuthController {
         loginRequest.setPassword(request.getPassword());
         loginRequest.setIpAddress(getClientIp(httpRequest));
 
-        AuthResponse response = authService.loginWithIdentifier(loginRequest);
+        ClientType clientType = ClientTypeResolver.resolve(httpRequest);
+        AuthResponse response = authService.loginWithIdentifier(loginRequest, clientType);
         return ResponseEntity.ok(ApiResponse.success("Login successful", response));
     }
 
