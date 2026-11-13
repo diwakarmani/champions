@@ -11,6 +11,7 @@ public class RatingDTO {
     private Long propertyId;
     private Long raterId;
     private String raterName;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.propertyapp.storage.ImageUrlSerializer.class)
     private String raterPhotoUrl;
     private int rating;
     private String comment;

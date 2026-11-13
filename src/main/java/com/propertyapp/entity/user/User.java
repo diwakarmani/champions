@@ -78,6 +78,33 @@ public class User extends SoftDeletableEntity {
 
     @Column(name = "website", length = 255)
     private String website;
+
+    /** Set while an admin has suspended this agent. Not the same as is_active: they can still log in (ADR-0004). */
+    @Column(name = "agent_suspended_at")
+    private LocalDateTime agentSuspendedAt;
+
+    @Column(name = "agent_suspension_reason", length = 1000)
+    private String agentSuspensionReason;
+
+    @Column(name = "brokerage_name", length = 150)
+    private String brokerageName;
+
+    @Column(name = "license_number", length = 50)
+    private String licenseNumber;
+
+    @Column(name = "license_state", length = 2)
+    private String licenseState;
+
+    @Column(name = "years_experience")
+    private Integer yearsExperience;
+
+    @Column(name = "service_areas", length = 500)
+    private String serviceAreas;
+
+    /** The license number appears on the public profile only if this is true. */
+    @Column(name = "license_public", nullable = false)
+    @Builder.Default
+    private boolean licensePublic = false;
     
     @ManyToMany(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
@@ -110,6 +137,20 @@ public class User extends SoftDeletableEntity {
         address.setUser(null);
     }
     
+    public boolean isAgentSuspended() {
+        return agentSuspendedAt != null;
+    }
+
+    public void suspendAsAgent(String reason) {
+        this.agentSuspendedAt = LocalDateTime.now();
+        this.agentSuspensionReason = reason;
+    }
+
+    public void reinstateAsAgent() {
+        this.agentSuspendedAt = null;
+        this.agentSuspensionReason = null;
+    }
+
     public void incrementFailedLoginAttempts() {
         this.failedLoginAttempts++;
     }

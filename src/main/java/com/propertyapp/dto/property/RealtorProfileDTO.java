@@ -15,6 +15,7 @@ import java.util.List;
 public class RealtorProfileDTO {
     private Long id;
     private String name;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.propertyapp.storage.ImageUrlSerializer.class)
     private String profilePhotoUrl;
     private String phone;
     private String email;

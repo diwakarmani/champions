@@ -1,5 +1,6 @@
 package com.propertyapp.controller;
 
+import com.propertyapp.service.property.PropertyVisibility;
 import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.dto.common.PageResponse;
 import com.propertyapp.dto.property.PropertyCompareDTO;
@@ -78,7 +79,25 @@ public class FavoriteController {
         return ResponseEntity.ok(ApiResponse.success(PageResponse.of(dtoPage)));
     }
 
+    /** Most saved ids one call returns; far above any real buyer's list, and it bounds the response. */
+    static final int SAVED_IDS_LIMIT = 1000;
+
+    @GetMapping("/ids")
+    @Transactional(readOnly = true)
+    @Operation(summary = "Ids of my saved homes",
+            description = "Ids of the caller's saved listings that the public may see, newest first, at most 1000. "
+                    + "For save hearts on listing cards: one call per page, not one per card.")
+    public ResponseEntity<ApiResponse<List<Long>>> getMyFavoriteIds() {
+        Long userId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        List<Long> ids = favoriteRepository
+                .findPropertyIdsByUserId(userId, PageRequest.of(0, SAVED_IDS_LIMIT))
+                .getContent();
+        return ResponseEntity.ok(ApiResponse.success(ids));
+    }
+
     @PostMapping("/{propertyId}")
+    @Transactional
     @Operation(summary = "Add to favorites")
     public ResponseEntity<ApiResponse<Void>> addFavorite(@PathVariable Long propertyId) {
         Long userId = SecurityUtils.getCurrentUserId()
@@ -90,7 +109,9 @@ public class FavoriteController {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        Property property = propertyRepository.findById(propertyId)
+        // Only listings the public may see can be saved; hidden ones do not exist (ADR-0006).
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
+                .filter(PropertyVisibility::isPubliclyVisible)
                 .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
 
         UserFavorite favorite = UserFavorite.builder()
@@ -142,6 +163,12 @@ public class FavoriteController {
         }
 
         List<Property> properties = favoriteRepository.findByIdsWithImagesAndAmenities(uniqueIds);
+        // A saved listing that has since been hidden cannot be compared (ADR-0006 Amendment 1).
+        boolean anyHidden = properties.size() < uniqueIds.size() || properties.stream()
+                .anyMatch(p -> p.isDeleted() || !PropertyVisibility.isPubliclyVisible(p));
+        if (anyHidden) {
+            throw new ResourceNotFoundException("One or more selected properties are no longer available.");
+        }
 
         // Restore request order
         Map<Long, Property> byId = properties.stream()

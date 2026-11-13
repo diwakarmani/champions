@@ -137,6 +137,7 @@ class RealtorRatingServiceImplTest {
 
         @Test
         void rejectsSubmit_whenNotEligible() {
+            givenRealtorExists();
             givenBuyerIsEligible(false);
 
             assertThatThrownBy(() -> service.submitRating(REALTOR_ID, BUYER_ID, req(4, null)))
@@ -147,7 +148,6 @@ class RealtorRatingServiceImplTest {
         @Test
         void rejectsSubmit_whenRealtorDoesNotExist() {
             when(userRepository.findByIdAndDeletedAtIsNull(REALTOR_ID)).thenReturn(Optional.empty());
-            givenBuyerIsEligible(true);
 
             assertThatThrownBy(() -> service.submitRating(REALTOR_ID, BUYER_ID, req(3, null)))
                     .isInstanceOf(ResourceNotFoundException.class);
@@ -162,9 +162,19 @@ class RealtorRatingServiceImplTest {
                     .build();
             nonRealtor.setId(REALTOR_ID);
             when(userRepository.findByIdAndDeletedAtIsNull(REALTOR_ID)).thenReturn(Optional.of(nonRealtor));
-            givenBuyerIsEligible(true);
 
             assertThatThrownBy(() -> service.submitRating(REALTOR_ID, BUYER_ID, req(5, null)))
+                    .isInstanceOf(ResourceNotFoundException.class);
+        }
+
+        @Test
+        void rejectsSubmitAndReads_whenRealtorIsSuspended() {
+            realtor.suspendAsAgent("test");
+            givenRealtorExists();
+
+            assertThatThrownBy(() -> service.submitRating(REALTOR_ID, BUYER_ID, req(5, null)))
+                    .isInstanceOf(ResourceNotFoundException.class);
+            assertThatThrownBy(() -> service.getRatings(REALTOR_ID, 0, 10))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }
@@ -228,6 +238,7 @@ class RealtorRatingServiceImplTest {
 
         @Test
         void ineligible_whenInquiryIsNewAndLessThan30s() {
+            givenRealtorExists();
             givenBuyerIsEligible(false);
 
             assertThatThrownBy(() -> service.submitRating(REALTOR_ID, BUYER_ID, req(5, null)))

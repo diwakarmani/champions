@@ -1,5 +1,8 @@
 package com.propertyapp.controller;
 
+import com.propertyapp.security.ratelimit.ClientIpResolver;
+import com.propertyapp.dto.user.DeleteAccountRequest;
+import com.propertyapp.service.user.AccountDeletionService;
 import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.dto.common.PageResponse;
 import com.propertyapp.dto.user.*;
@@ -26,7 +29,9 @@ import java.util.Set;
 @Tag(name = "User Management", description = "User management APIs")
 public class UserController {
     
+    private final ClientIpResolver clientIpResolver;
     private final UserService userService;
+    private final AccountDeletionService accountDeletionService;
     
     @GetMapping
     @Operation(summary = "Get all users (Admin only)")
@@ -93,6 +98,13 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success("Profile updated successfully", user));
     }
     
+    @DeleteMapping("/me")
+    @Operation(summary = "Delete my account: confirm with password or OTP; anonymises personal data (ADR-0008)")
+    public ResponseEntity<ApiResponse<Void>> deleteMyAccount(@Valid @RequestBody DeleteAccountRequest request) {
+        accountDeletionService.deleteMyAccount(request);
+        return ResponseEntity.ok(ApiResponse.success("Your account has been deleted", null));
+    }
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete user (Admin only)")
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Long id) {
@@ -189,14 +201,8 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success("Email address updated successfully", user));
     }
 
+    /** Forwarded headers count only from trusted proxies (ADR-0007 Amendment 1). */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return ip;
+        return clientIpResolver.resolve(request);
     }
 }

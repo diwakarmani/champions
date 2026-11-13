@@ -1,0 +1,110 @@
+# Required on every PR and push to main (ADR-0013). Keep job names stable: branch protection refers to them.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Spotless compares with origin/main
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Format check (changed files)
+        run: |
+          git fetch origin main:refs/remotes/origin/main --force
+          mvn -B -ntp spotless:check
+      - name: Verify (unit, integration, architecture, contract snapshot, coverage floor)
+        run: mvn -B -ntp verify
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-reports
+          path: |
+            target/surefire-reports
+            target/site/jacoco
+          retention-days: 14
+
+  api-breaking-changes:
+    name: API breaking changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare contract with main
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'api-breaking') }}
+        run: |
+          if ! git cat-file -e "origin/${{ github.base_ref }}:contracts/openapi.json" 2>/dev/null; then
+            echo "No contract on the base branch yet; nothing to compare."
+            exit 0
+          fi
+          mkdir -p .base
+          git show "origin/${{ github.base_ref }}:contracts/openapi.json" > .base/openapi.json
+          docker run --rm -v "$PWD:/w" -w /w tufin/oasdiff breaking --fail-on ERR .base/openapi.json contracts/openapi.json
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest detect --source=/repo --redact --no-banner --log-opts="--all"
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+      - run: mvn -B -ntp -DskipTests compile
+      - uses: github/codeql-action/analyze@v3
+
+  docker-image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t champion-api:ci .

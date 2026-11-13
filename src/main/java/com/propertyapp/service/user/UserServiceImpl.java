@@ -6,6 +6,7 @@ import com.propertyapp.entity.user.Role;
 import com.propertyapp.entity.user.User;
 import com.propertyapp.entity.user.UserAddress;
 import com.propertyapp.exception.BadRequestException;
+import com.propertyapp.exception.ConflictException;
 import com.propertyapp.exception.DuplicateResourceException;
 import com.propertyapp.exception.ResourceNotFoundException;
 import com.propertyapp.exception.UnauthorizedException;
@@ -44,19 +45,20 @@ public class UserServiceImpl implements UserService {
     private final UserAddressRepository addressRepository;
     private final UserMapper userMapper;
     private final OtpService otpService;
-    
+    private final com.propertyapp.storage.ImageRefs imageRefs;
+
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PageResponse<UserDTO> getAllUsers(Pageable pageable) {
         log.info("Fetching all users, page: {}", pageable.getPageNumber());
-        
+
         Page<User> users = userRepository.findAllByDeletedAtIsNull(pageable);
         Page<UserDTO> userDTOs = users.map(userMapper::toDTO);
-        
+
         return PageResponse.of(userDTOs);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('SUPER_ADMIN')")
@@ -74,44 +76,45 @@ public class UserServiceImpl implements UserService {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PageResponse<UserDTO> searchUsers(String search, Pageable pageable) {
         log.info("Searching users with query: {}", search);
-        
+
         Page<User> users = userRepository.searchUsers(search, pageable);
         Page<UserDTO> userDTOs = users.map(userMapper::toDTO);
-        
+
         return PageResponse.of(userDTOs);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('SUPER_ADMIN') or #id == authentication.principal.id")
     @Cacheable(value = "users", key = "#id")
     public UserDTO getUserById(Long id) {
         log.info("Fetching user by id: {}", id);
-        
+
         User user = userRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
-        
+
         return userMapper.toDTO(user);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public UserDTO getCurrentUser() {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
+
         return getUserById(userId);
     }
-    
+
     @Override
     @Transactional
     @CacheEvict(value = "users", key = "#id")
-    @PreAuthorize("hasRole('SUPER_ADMIN') or @securityUtils.getCurrentUserId().orElse(null) == #id")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or #id == authentication.principal.id")
     public UserDTO updateUser(Long id, UserUpdateRequest request) {
         log.info("Updating user: {}", id);
-        
+
         User user = userRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
-        
+
         if (request.getFirstName() != null) {
             user.setFirstName(request.getFirstName());
         }
@@ -133,64 +136,74 @@ public class UserServiceImpl implements UserService {
         if (request.getWebsite() != null) {
             user.setWebsite(request.getWebsite());
         }
+        // Was accepted and silently ignored before S13. Blank removes the photo.
+        if (request.getProfileImageUrl() != null) {
+            user.setProfileImageUrl(request.getProfileImageUrl().isBlank()
+                    ? null : imageRefs.toStored(request.getProfileImageUrl()));
+        }
 
         user = userRepository.save(user);
-        
+
         return userMapper.toDTO(user);
     }
-    
+
     @Override
     @Transactional
     public UserDTO updateCurrentUser(UserUpdateRequest request) {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
+
         return updateUser(userId, request);
     }
-    
+
     @Override
     @Transactional
     @CacheEvict(value = "users", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public void deleteUser(Long id) {
         log.info("Deleting user: {}", id);
-        
+
         User user = userRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
-        
+
         Long currentUserId = SecurityUtils.getCurrentUserId().orElse(null);
         user.markAsDeleted(currentUserId);
         userRepository.save(user);
-        
+
         log.info("User deleted successfully: {}", id);
     }
-    
+
     @Override
     @Transactional
     public void changePassword(ChangePasswordRequest request) {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
+
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        
+
         // Verify current password
         if (!PasswordUtils.matches(request.getCurrentPassword(), user.getPasswordHash())) {
             throw new BadRequestException("Current password is incorrect");
         }
-        
+
         // Update password
         user.setPasswordHash(PasswordUtils.hash(request.getNewPassword()));
         userRepository.save(user);
-        
+
         log.info("Password changed successfully for user: {}", userId);
     }
-    
+
     @Override
     @Transactional
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @CacheEvict(value = "users", allEntries = true) // roles or agent status changed
     public void assignRoles(Long userId, Set<String> roleNames) {
         log.info("Assigning roles to user {}: {}", userId, roleNames);
+
+        if (roleNames.contains("SELLER")) {
+            throw new BadRequestException("The Seller role is retired: listings are managed by agents");
+        }
 
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
@@ -222,7 +235,7 @@ public class UserServiceImpl implements UserService {
 
         log.info("Roles assigned successfully to user: {}", userId);
     }
-    
+
     @Override
     @Transactional
     @PreAuthorize("hasRole('SUPER_ADMIN')")
@@ -231,8 +244,8 @@ public class UserServiceImpl implements UserService {
         log.info("Activating user: {}", id);
         User user = userRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        // Reactivating does not confirm the email: only a code or link sent to it does (S12 review).
         user.setActive(true);
-        user.setEmailVerified(true);
         return userMapper.toDTO(userRepository.save(user));
     }
 
@@ -242,6 +255,9 @@ public class UserServiceImpl implements UserService {
     @CacheEvict(value = "users", key = "#id")
     public UserDTO deactivateUser(Long id) {
         log.info("Deactivating user: {}", id);
+        if (SecurityUtils.getCurrentUserId().map(id::equals).orElse(false)) {
+            throw new ConflictException("You cannot deactivate your own account. Another admin must.");
+        }
         User user = userRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
         user.setActive(false);
@@ -253,18 +269,18 @@ public class UserServiceImpl implements UserService {
     public UserAddressDTO addAddress(UserAddressDTO addressDTO) {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
+
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        
+
         UserAddress address = userMapper.toAddressEntity(addressDTO);
         address.setUser(user);
-        
+
         address = addressRepository.save(address);
-        
+
         return userMapper.toAddressDTO(address);
     }
-    
+
     @Override
     @Transactional
     public void removeAddress(Long addressId) {

@@ -19,6 +19,7 @@ public class PropertyCompareDTO {
 
     private Long id;
     private String title;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.propertyapp.storage.ImageUrlSerializer.class)
     private String primaryImageUrl;
 
     // Type & listing

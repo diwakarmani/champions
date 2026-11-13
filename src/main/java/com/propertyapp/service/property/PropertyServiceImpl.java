@@ -27,12 +27,13 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.PrecisionModel;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.beans.factory.annotation.Value;
+import com.propertyapp.entity.property.ListingReassignment;
+import com.propertyapp.repository.property.ListingReassignmentRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +48,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class PropertyServiceImpl implements PropertyService {
-    
+
     private final PropertyRepository propertyRepository;
     private final PropertyTypeRepository propertyTypeRepository;
     private final PropertySubTypeRepository propertySubTypeRepository;
@@ -59,19 +60,22 @@ public class PropertyServiceImpl implements PropertyService {
 private final PropertyContactEventRepository contactEventRepository;
     private final InquiryRepository inquiryRepository;
     private final NotificationService notificationService;
+    private final ListingReassignmentRepository listingReassignmentRepository;
+    private final com.propertyapp.storage.ImageRefs imageRefs;
+
+    /** Client's "configured approval process" (ADR-0005). */
+    @Value("${app.listing.approval-required:true}")
+    private boolean listingApprovalRequired;
 
     @Override
     @Transactional
-    @PreAuthorize("hasAnyRole('SELLER', 'REALTOR', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('REALTOR', 'SUPER_ADMIN')")
     public PropertyDTO createProperty(PropertyCreateRequest request) {
 
         log.info("Creating new property: {}", request.getTitle());
 
-        Long ownerId = SecurityUtils.getCurrentUserId()
-                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-
-        User owner = userRepository.findByIdAndDeletedAtIsNull(ownerId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", ownerId));
+        User owner = resolveListingAgent(request.getAgentId());
+        Long ownerId = owner.getId();
 
         PropertyType propertyType = propertyTypeRepository.findById(request.getPropertyTypeId())
                 .orElseThrow(() -> new ResourceNotFoundException("PropertyType", "id", request.getPropertyTypeId()));
@@ -169,7 +173,6 @@ private final PropertyContactEventRepository contactEventRepository;
 
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     public PropertyDTO updateProperty(Long id, PropertyUpdateRequest request) {
 
         log.info("Updating property: {}", id);
@@ -180,12 +183,7 @@ private final PropertyContactEventRepository contactEventRepository;
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
 
-        boolean isOwner = property.getOwner().getId().equals(currentUserId);
-        boolean isAdmin = SecurityUtils.hasRole("SUPER_ADMIN");
-
-        if (!isOwner && !isAdmin) {
-            throw new UnauthorizedException("You don't have permission to update this property");
-        }
+        requireListingManager(property, currentUserId, "update this property");
 
         if (request.getTitle() != null) property.setTitle(request.getTitle());
         if (request.getDescription() != null) property.setDescription(request.getDescription());
@@ -241,27 +239,122 @@ private final PropertyContactEventRepository contactEventRepository;
 
         return propertyMapper.toDTO(property);
     }
-    
+
     @Override
-    @Transactional(readOnly = true)
-    @Cacheable(value = "properties", key = "#id")
+    @Transactional // not read-only: it records the view
     public PropertyDTO getPropertyById(Long id) {
         log.info("Fetching property by id: {}", id);
-        
-        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
-        
-        // Increment view count asynchronously
-        incrementViewCount(id);
-        
+
+        Property property = findViewableProperty(id);
+
+        if (PropertyVisibility.isPubliclyVisible(property)) {
+            incrementViewCount(id);
+        }
+
         return propertyMapper.toDTO(property);
     }
-    
+
+    /** The agent a new listing belongs to (ADR-0005): the caller, or the agent an admin names. */
+    private User resolveListingAgent(Long requestedAgentId) {
+        Long callerId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+
+        if (requestedAgentId == null || requestedAgentId.equals(callerId)) {
+            User caller = userRepository.findByIdAndDeletedAtIsNull(callerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", callerId));
+            if (caller.isAgentSuspended()) {
+                throw new BadRequestException("Your agent account is suspended, so you cannot create listings");
+            }
+            if (!PropertyVisibility.isActiveAgent(caller)) {
+                throw new BadRequestException("A listing must belong to an agent: choose an agent for this listing");
+            }
+            return caller;
+        }
+
+        if (!SecurityUtils.hasRole("SUPER_ADMIN")) {
+            throw new UnauthorizedException("Only an admin can create a listing for another agent");
+        }
+        return findActiveAgent(requestedAgentId);
+    }
+
+    private User findActiveAgent(Long agentId) {
+        User agent = userRepository.findByIdAndDeletedAtIsNull(agentId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", agentId));
+        if (!PropertyVisibility.isActiveAgent(agent)) {
+            throw new BadRequestException("The selected user is not an active agent");
+        }
+        return agent;
+    }
+
+    /** Listings are managed by an admin, or by their owner while that owner is an active agent. */
+    private void requireListingManager(Property property, Long currentUserId, String action) {
+        boolean isOwningAgent = property.getOwner().getId().equals(currentUserId)
+                && PropertyVisibility.isActiveAgent(property.getOwner());
+        if (!isOwningAgent && !SecurityUtils.hasRole("SUPER_ADMIN")) {
+            throw new UnauthorizedException("You don't have permission to " + action);
+        }
+    }
+
+    private void requireActiveAgentOwner(Property property) {
+        if (!PropertyVisibility.isActiveAgent(property.getOwner())) {
+            throw new BadRequestException(
+                    "This listing has no active agent. Reassign it to an agent before it can go live.");
+        }
+    }
+
+    @Override
+    @Transactional
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public PropertyDTO reassignListing(Long id, Long agentId) {
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+        User newAgent = findActiveAgent(agentId);
+        User previousOwner = property.getOwner();
+
+        if (previousOwner.getId().equals(newAgent.getId())) {
+            throw new BadRequestException("This listing already belongs to that agent");
+        }
+        Long adminId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
+
+        property.setOwner(newAgent);
+        property = propertyRepository.save(property);
+
+        listingReassignmentRepository.save(ListingReassignment.builder()
+                .propertyId(property.getId())
+                .fromUserId(previousOwner.getId())
+                .toUserId(newAgent.getId())
+                .reassignedBy(adminId)
+                .build());
+
+        notificationService.send(
+                newAgent.getId(),
+                NotificationType.LISTING_REASSIGNED,
+                "A listing was assigned to you",
+                "\"" + property.getTitle() + "\" is now yours to manage, including its enquiries.",
+                "PROPERTY",
+                property.getId());
+
+        log.info("Listing {} reassigned from user {} to agent {} by admin {}",
+                id, previousOwner.getId(), newAgent.getId(), adminId);
+        return propertyMapper.toDTO(property);
+    }
+
+    private Property findViewableProperty(Long id) {
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+        Long viewerId = SecurityUtils.getCurrentUserId().orElse(null);
+        if (!PropertyVisibility.canView(property, viewerId, SecurityUtils.hasRole("SUPER_ADMIN"))) {
+            throw new ResourceNotFoundException("Property", "id", id);
+        }
+        return property;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public PageResponse<PropertyDTO> searchProperties(PropertySearchRequest request, Pageable pageable) {
         log.info("Searching properties with filters: {}", request);
-        
+
         Specification<Property> spec = PropertySpecification.withFilters(
                 request.getCity(),
                 request.getState(),
@@ -275,27 +368,27 @@ private final PropertyContactEventRepository contactEventRepository;
                 "ACTIVE", // Only show active properties in public search
                 request.getLocalities()
         );
-        
+
         Page<Property> properties = propertyRepository.findAll(spec, pageable);
         Page<PropertyDTO> propertyDTOs = properties.map(propertyMapper::toDTO);
-        
+
         return PageResponse.of(propertyDTOs);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public PageResponse<PropertyDTO> getMyListings(Pageable pageable) {
         log.info("Fetching user's property listings");
-        
+
         Long ownerId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
+
         Page<Property> properties = propertyRepository.findByOwnerIdAndDeletedAtIsNull(ownerId, pageable);
         Page<PropertyDTO> propertyDTOs = properties.map(propertyMapper::toDTO);
-        
+
         return PageResponse.of(propertyDTOs);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('SUPER_ADMIN')")
@@ -309,16 +402,15 @@ private final PropertyContactEventRepository contactEventRepository;
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PageResponse<PropertyDTO> getPropertiesByStatus(String status, Pageable pageable) {
         log.info("Fetching properties by status: {}", status);
-        
+
         Page<Property> properties = propertyRepository.findByStatusAndDeletedAtIsNull(status, pageable);
         Page<PropertyDTO> propertyDTOs = properties.map(propertyMapper::toDTO);
-        
+
         return PageResponse.of(propertyDTOs);
     }
-    
+
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     public void deleteProperty(Long id) {
         log.info("Deleting property: {}", id);
 
@@ -328,18 +420,9 @@ private final PropertyContactEventRepository contactEventRepository;
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
 
-        boolean isAdmin = SecurityUtils.hasRole("SUPER_ADMIN");
-        boolean isRealtor = SecurityUtils.hasRole("REALTOR");
-
-        if (isRealtor && !isAdmin) {
-            throw new UnauthorizedException("Realtors must submit a deletion request for admin approval.");
-        }
-
-        if (!isAdmin) {
-            boolean isOwner = property.getOwner().getId().equals(currentUserId);
-            if (!isOwner) {
-                throw new UnauthorizedException("You can only delete your own properties.");
-            }
+        // Agents ask for deletion and an admin decides; only an admin deletes directly.
+        if (!SecurityUtils.hasRole("SUPER_ADMIN")) {
+            throw new UnauthorizedException("Please submit a deletion request for admin approval.");
         }
 
         property.markAsDeleted(currentUserId);
@@ -349,7 +432,6 @@ private final PropertyContactEventRepository contactEventRepository;
 
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     public PropertyDTO requestDeletion(Long id) {
         log.info("Deletion requested for property: {}", id);
 
@@ -359,10 +441,7 @@ private final PropertyContactEventRepository contactEventRepository;
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
 
-        boolean isOwner = property.getOwner().getId().equals(currentUserId);
-        if (!isOwner) {
-            throw new UnauthorizedException("You can only request deletion of your own properties.");
-        }
+        requireListingManager(property, currentUserId, "request deletion of this property");
 
         if ("DELETION_REQUESTED".equals(property.getStatus())) {
             throw new BadRequestException("A deletion request is already pending for this property.");
@@ -381,7 +460,6 @@ private final PropertyContactEventRepository contactEventRepository;
 
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO approveDeletion(Long id) {
         log.info("Admin approving deletion for property: {}", id);
@@ -402,7 +480,6 @@ private final PropertyContactEventRepository contactEventRepository;
 
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO rejectDeletion(Long id, String reason) {
         log.info("Admin rejecting deletion for property: {}", id);
@@ -420,24 +497,21 @@ private final PropertyContactEventRepository contactEventRepository;
         log.info("Deletion rejected — property restored to ACTIVE: {}", id);
         return propertyMapper.toDTO(property);
     }
-    
+
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     public PropertyDTO publishProperty(Long id) {
         log.info("Publishing property: {}", id);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
-        
+
         // Check ownership
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
-        if (!property.getOwner().getId().equals(currentUserId)) {
-            throw new UnauthorizedException("You don't have permission to publish this property");
-        }
-        
+
+        requireListingManager(property, currentUserId, "manage this property");
+
         // Validate required fields
         if (property.getTitle() == null || property.getPrice() == null) {
             throw new BadRequestException("Property must have title and price to be published");
@@ -450,154 +524,167 @@ private final PropertyContactEventRepository contactEventRepository;
             throw new BadRequestException("Property is already active");
         }
 
-        property.setStatus("PENDING_APPROVAL");
-        log.info("Property submitted for admin approval: {}", id);
+        requireActiveAgentOwner(property);
+
+        if (listingApprovalRequired) {
+            property.setStatus("PENDING_APPROVAL");
+            log.info("Property submitted for admin approval: {}", id);
+        } else {
+            property.setStatus("ACTIVE");
+            property.setRejectionReason(null);
+            if (property.getPublishedAt() == null) {
+                property.setPublishedAt(LocalDateTime.now());
+            }
+            log.info("Property published without approval (app.listing.approval-required=false): {}", id);
+        }
 
         property = propertyRepository.save(property);
         return propertyMapper.toDTO(property);
     }
-    
+
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO updatePropertyStatus(Long id, String status) {
         log.info("Updating property status: {} to {}", id, status);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
-        
+
         // Validate status
         List<String> validStatuses = List.of("DRAFT", "PENDING_APPROVAL", "ACTIVE", "SOLD", "RENTED", "INACTIVE");
         if (!validStatuses.contains(status)) {
             throw new BadRequestException("Invalid status: " + status);
         }
-        
+
+        if ("ACTIVE".equals(status)) {
+            requireActiveAgentOwner(property);
+        }
+
         property.setStatus(status);
-        
+
         if ("ACTIVE".equals(status) && property.getPublishedAt() == null) {
             property.setPublishedAt(LocalDateTime.now());
         }
-        
+
         property = propertyRepository.save(property);
-        
+
         log.info("Property status updated successfully: {}", id);
         return propertyMapper.toDTO(property);
     }
-    
+
     @Override
     @Transactional
     public PropertyImageDTO addPropertyImage(Long propertyId, PropertyImageDTO imageDTO) {
         log.info("Adding image to property: {}", propertyId);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", propertyId));
-        
+
         // Check ownership
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
-        if (!property.getOwner().getId().equals(currentUserId)) {
-            throw new UnauthorizedException("You don't have permission to add images to this property");
-        }
-        
+
+        requireListingManager(property, currentUserId, "manage this property");
+
         PropertyImage image = propertyMapper.toImageEntity(imageDTO);
         image.setProperty(property);
-        
-        // If this is the first image, make it primary
-        if (property.getImages().isEmpty()) {
-            image.setPrimary(true);
-        }
-        
+        // ADR-0016: keep the storage key, not the host; refuse photos on hosts we do not serve.
+        image.setImageUrl(imageRefs.toStored(imageDTO.getImageUrl()));
+        String card = imageRefs.cardFor(image.getImageUrl());
+        image.setThumbnailUrl(card != null ? card : imageRefs.toStored(imageDTO.getThumbnailUrl()));
+
+        // The first image is the cover. Later ones never are on add (set-primary changes it), so a
+        // client cannot create two covers by sending isPrimary.
+        image.setPrimary(property.getImages().isEmpty());
+
         image = propertyImageRepository.save(image);
-        
+
         log.info("Image added successfully to property: {}", propertyId);
         return propertyMapper.toImageDTO(image);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<PropertyImageDTO> getPropertyImages(Long propertyId) {
         log.info("Fetching images for property: {}", propertyId);
-        
+
+        findViewableProperty(propertyId);
+
         List<PropertyImage> images = propertyImageRepository.findByPropertyIdOrderByDisplayOrder(propertyId);
         return images.stream()
                 .map(propertyMapper::toImageDTO)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
     @Transactional
     public void deletePropertyImage(Long propertyId, Long imageId) {
         log.info("Deleting image {} from property {}", imageId, propertyId);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", propertyId));
-        
+
         // Check ownership
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
-        if (!property.getOwner().getId().equals(currentUserId)) {
-            throw new UnauthorizedException("You don't have permission to delete images from this property");
-        }
-        
+
+        requireListingManager(property, currentUserId, "manage this property");
+
         PropertyImage image = propertyImageRepository.findById(imageId)
                 .orElseThrow(() -> new ResourceNotFoundException("PropertyImage", "id", imageId));
-        
+
         if (!image.getProperty().getId().equals(propertyId)) {
             throw new BadRequestException("Image does not belong to this property");
         }
-        
+
         propertyImageRepository.delete(image);
-        
+
         log.info("Image deleted successfully");
     }
-    
+
     @Override
     @Transactional
     public void setPrimaryImage(Long propertyId, Long imageId) {
         log.info("Setting primary image {} for property {}", imageId, propertyId);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", propertyId));
-        
+
         // Check ownership
         Long currentUserId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("User not authenticated"));
-        
-        if (!property.getOwner().getId().equals(currentUserId)) {
-            throw new UnauthorizedException("You don't have permission to modify this property");
-        }
-        
+
+        requireListingManager(property, currentUserId, "manage this property");
+
         PropertyImage newPrimaryImage = propertyImageRepository.findById(imageId)
                 .orElseThrow(() -> new ResourceNotFoundException("PropertyImage", "id", imageId));
-        
+
         if (!newPrimaryImage.getProperty().getId().equals(propertyId)) {
             throw new BadRequestException("Image does not belong to this property");
         }
-        
+
         // Unset current primary image
         propertyImageRepository.findByPropertyIdAndIsPrimaryTrue(propertyId)
                 .ifPresent(currentPrimary -> {
                     currentPrimary.setPrimary(false);
                     propertyImageRepository.save(currentPrimary);
                 });
-        
+
         // Set new primary image
         newPrimaryImage.setPrimary(true);
         propertyImageRepository.save(newPrimaryImage);
-        
+
         log.info("Primary image set successfully");
     }
-    
+
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO approveProperty(Long id) {
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
+        requireActiveAgentOwner(property);
         property.setStatus("ACTIVE");
         property.setRejectionReason(null);
         if (property.getPublishedAt() == null) {
@@ -610,7 +697,6 @@ private final PropertyContactEventRepository contactEventRepository;
 
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO rejectProperty(Long id, String reason) {
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
@@ -623,59 +709,54 @@ private final PropertyContactEventRepository contactEventRepository;
 
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO toggleFeatured(Long id) {
         log.info("Toggling featured status for property: {}", id);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
-        
+
         property.setFeatured(!property.isFeatured());
         property = propertyRepository.save(property);
-        
+
         log.info("Featured status toggled to: {}", property.isFeatured());
         return propertyMapper.toDTO(property);
     }
-    
+
     @Override
     @Transactional
-    @CacheEvict(value = "properties", key = "#id")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'REALTOR')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PropertyDTO toggleVerified(Long id) {
         log.info("Toggling verified status for property: {}", id);
-        
+
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", id));
-        
+
         property.setVerified(!property.isVerified());
         property = propertyRepository.save(property);
-        
+
         log.info("Verified status toggled to: {}", property.isVerified());
         return propertyMapper.toDTO(property);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<PropertyDTO> getFeaturedProperties(int limit) {
         log.info("Fetching featured properties, limit: {}", limit);
-        
+
         Pageable pageable = PageRequest.of(0, limit);
         List<Property> properties = propertyRepository.findFeaturedProperties(pageable);
-        
+
         return properties.stream()
                 .map(propertyMapper::toDTO)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
     @Transactional
     public void incrementViewCount(Long id) {
-        propertyRepository.findByIdAndDeletedAtIsNull(id)
-                .ifPresent(property -> {
-                    property.incrementViewCount();
-                    propertyRepository.save(property);
-                });
+        // Atomic, and leaves updated_at alone: a page view is not an edit of the listing.
+        propertyRepository.incrementViewCount(id);
     }
 
     @Override
@@ -683,6 +764,8 @@ private final PropertyContactEventRepository contactEventRepository;
     public ContactRevealResponse revealContact(Long propertyId, Long userId) {
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Property", "id", propertyId));
+
+        PropertyVisibility.requireContactable(property);
 
         User owner = property.getOwner();
         if (owner.getId().equals(userId)) {

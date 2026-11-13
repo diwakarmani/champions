@@ -1,10 +1,9 @@
 package com.propertyapp;
 
+import com.propertyapp.integration.AbstractPostgisIntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class PropertyManagementSystemApplicationTests {
+class PropertyManagementSystemApplicationTests extends AbstractPostgisIntegrationTest {
 
 	@Test
 	void contextLoads() {

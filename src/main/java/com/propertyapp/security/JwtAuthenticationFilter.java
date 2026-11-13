@@ -15,6 +15,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -38,10 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         // Correlation ID handling
-        String correlationId = request.getHeader("X-Correlation-Id");
-        if (correlationId == null) {
-            correlationId = CorrelationIdUtils.generate();
-        }
+        String correlationId = CorrelationIdUtils.fromHeader(request.getHeader("X-Correlation-Id"));
         CorrelationIdUtils.set(correlationId);
         response.setHeader("X-Correlation-Id", correlationId);
 
@@ -68,9 +66,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-                UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
+                UserDetails userDetails = loadUser(userEmail);
 
-                if (jwtTokenProvider.isTokenValid(jwt, userDetails)) {
+                if (userDetails != null && isActive(userDetails) && jwtTokenProvider.isAccessTokenValid(jwt, userDetails)) {
 
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
@@ -91,6 +89,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         } finally {
             CorrelationIdUtils.clear();
+        }
+    }
+
+    /** A deactivated account's tokens stop working at once (S12). */
+    private static boolean isActive(UserDetails userDetails) {
+        return !(userDetails instanceof CustomUserDetails custom) || custom.isAccountActive();
+    }
+
+    /** A deleted or renamed account is just an unauthenticated request: 401 on protected routes, not 500. */
+    private UserDetails loadUser(String email) {
+        try {
+            return userDetailsService.loadUserByUsername(email);
+        } catch (UsernameNotFoundException e) {
+            log.warn("Token for an account that no longer exists");
+            return null;
         }
     }
 }

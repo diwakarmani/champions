@@ -21,6 +21,8 @@ public class PropertyCardDTO {
     private Integer bedrooms;
     private String furnishedStatus;
 
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.propertyapp.storage.ImageUrlSerializer.class)
+
     private String primaryImageUrl;
 
     private boolean verified;

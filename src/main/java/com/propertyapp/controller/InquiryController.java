@@ -16,6 +16,7 @@ import com.propertyapp.repository.inquiry.InquiryRepository;
 import com.propertyapp.repository.property.PropertyRepository;
 import com.propertyapp.repository.user.UserRepository;
 import com.propertyapp.service.notification.NotificationService;
+import com.propertyapp.service.property.PropertyVisibility;
 import com.propertyapp.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -55,8 +56,9 @@ public class InquiryController {
         Long userId = SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException("Authentication required"));
 
-        Property property = propertyRepository.findById(request.getPropertyId())
+        Property property = propertyRepository.findByIdAndDeletedAtIsNull(request.getPropertyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+        PropertyVisibility.requireContactable(property);
 
         User inquirer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));

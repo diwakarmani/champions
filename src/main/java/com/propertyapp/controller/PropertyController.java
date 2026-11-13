@@ -15,7 +15,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,11 +27,11 @@ import java.util.List;
 @RequiredArgsConstructor
 @Tag(name = "Property Management", description = "Property listing and management APIs")
 public class PropertyController {
-    
+
     private final PropertyService propertyService;
-    
+
     @GetMapping
-    @Operation(summary = "Search properties with filters", 
+    @Operation(summary = "Search properties with filters",
                description = "Public endpoint to search active properties with various filters")
     public ResponseEntity<ApiResponse<PageResponse<PropertyDTO>>> searchProperties(
             @Parameter(description = "City name") @RequestParam(required = false) String city,
@@ -62,23 +61,21 @@ public class PropertyController {
                 .furnishedStatus(furnishedStatus)
                 .localities(localities)
                 .build();
-        
-        Sort.Direction direction = sortDirection.equalsIgnoreCase("ASC") 
-            ? Sort.Direction.ASC : Sort.Direction.DESC;
+
         Pageable pageable = PageRequest.of(page, Math.min(size, Constants.MAX_PAGE_SIZE),
-            Sort.by(direction, sortBy));
-        
+            PropertySort.of(sortBy, sortDirection));
+
         PageResponse<PropertyDTO> properties = propertyService.searchProperties(searchRequest, pageable);
         return ResponseEntity.ok(ApiResponse.success(properties));
     }
-    
+
     @GetMapping("/{id}")
     @Operation(summary = "Get property by ID", description = "Get detailed property information")
     public ResponseEntity<ApiResponse<PropertyDTO>> getPropertyById(@PathVariable Long id) {
         PropertyDTO property = propertyService.getPropertyById(id);
         return ResponseEntity.ok(ApiResponse.success(property));
     }
-    
+
     @PostMapping
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Create new property", description = "Seller/Realtor can create property listing")
@@ -89,7 +86,7 @@ public class PropertyController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Property created successfully", property));
     }
-    
+
     @PutMapping("/{id}")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Update property", description = "Owner can update their property")
@@ -100,7 +97,7 @@ public class PropertyController {
         PropertyDTO property = propertyService.updateProperty(id, request);
         return ResponseEntity.ok(ApiResponse.success("Property updated successfully", property));
     }
-    
+
     @DeleteMapping("/{id}")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Delete property", description = "Owner or Admin can delete property (soft delete)")
@@ -108,7 +105,7 @@ public class PropertyController {
         propertyService.deleteProperty(id);
         return ResponseEntity.ok(ApiResponse.success("Property deleted successfully", null));
     }
-    
+
     @PostMapping("/{id}/request-deletion")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Request property deletion", description = "Owner submits a deletion request; admin must approve before property becomes inactive")
@@ -124,7 +121,7 @@ public class PropertyController {
         PropertyDTO property = propertyService.publishProperty(id);
         return ResponseEntity.ok(ApiResponse.success("Property published successfully", property));
     }
-    
+
     @PatchMapping("/{id}/status")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Update property status", description = "Admin/Realtor can update property status")
@@ -135,7 +132,7 @@ public class PropertyController {
         PropertyDTO property = propertyService.updatePropertyStatus(id, status);
         return ResponseEntity.ok(ApiResponse.success("Property status updated", property));
     }
-    
+
     @GetMapping("/my-listings")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Get my property listings", description = "Get current user's properties")
@@ -145,15 +142,13 @@ public class PropertyController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "DESC") String sortDirection
     ) {
-        Sort.Direction direction = sortDirection.equalsIgnoreCase("ASC") 
-            ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, Math.min(size, Constants.MAX_PAGE_SIZE),
-            Sort.by(direction, sortBy));
-        
+            PropertySort.of(sortBy, sortDirection));
+
         PageResponse<PropertyDTO> properties = propertyService.getMyListings(pageable);
         return ResponseEntity.ok(ApiResponse.success(properties));
     }
-    
+
     @GetMapping("/status/{status}")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Get properties by status", description = "Admin can view properties by status")
@@ -166,7 +161,7 @@ public class PropertyController {
         PageResponse<PropertyDTO> properties = propertyService.getPropertiesByStatus(status, pageable);
         return ResponseEntity.ok(ApiResponse.success(properties));
     }
-    
+
     @GetMapping("/featured")
     @Operation(summary = "Get featured properties", description = "Get list of featured properties")
     public ResponseEntity<ApiResponse<List<PropertyDTO>>> getFeaturedProperties(
@@ -175,7 +170,7 @@ public class PropertyController {
         List<PropertyDTO> properties = propertyService.getFeaturedProperties(limit);
         return ResponseEntity.ok(ApiResponse.success(properties));
     }
-    
+
     @PatchMapping("/{id}/toggle-featured")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Toggle featured status", description = "Admin can mark property as featured")
@@ -183,17 +178,17 @@ public class PropertyController {
         PropertyDTO property = propertyService.toggleFeatured(id);
         return ResponseEntity.ok(ApiResponse.success("Featured status updated", property));
     }
-    
+
     @PatchMapping("/{id}/toggle-verified")
     @SecurityRequirement(name = "Bearer Authentication")
-    @Operation(summary = "Toggle verified status", description = "Admin/Realtor can verify property")
+    @Operation(summary = "Toggle verified status", description = "Admin can verify property")
     public ResponseEntity<ApiResponse<PropertyDTO>> toggleVerified(@PathVariable Long id) {
         PropertyDTO property = propertyService.toggleVerified(id);
         return ResponseEntity.ok(ApiResponse.success("Verified status updated", property));
     }
-    
+
     // Image management endpoints
-    
+
     @GetMapping("/{id}/images")
     @Operation(summary = "Get property images", description = "Get all images for a property")
     public ResponseEntity<ApiResponse<List<PropertyImageDTO>>> getPropertyImages(
@@ -202,7 +197,7 @@ public class PropertyController {
         List<PropertyImageDTO> images = propertyService.getPropertyImages(id);
         return ResponseEntity.ok(ApiResponse.success(images));
     }
-    
+
     @PostMapping("/{id}/images")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Add property image", description = "Owner can upload property images")
@@ -214,7 +209,7 @@ public class PropertyController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Image added successfully", image));
     }
-    
+
     @DeleteMapping("/{propertyId}/images/{imageId}")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Delete property image", description = "Owner can delete property images")
@@ -225,7 +220,7 @@ public class PropertyController {
         propertyService.deletePropertyImage(propertyId, imageId);
         return ResponseEntity.ok(ApiResponse.success("Image deleted successfully", null));
     }
-    
+
     @PatchMapping("/{propertyId}/images/{imageId}/set-primary")
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Set primary image", description = "Owner can set primary property image")

@@ -53,12 +53,13 @@ public class OtpServiceImpl implements OtpService {
         String identifier = request.getIdentifier().trim();
         String identifierType = detectIdentifierType(identifier);
 
-        // Reject unknown identifiers — prevents OTP codes from being issued to
-        // non-existent accounts (typo emails would otherwise allow login via a
-        // non-existent account).
+        // No code is issued for an unknown identifier (a typo must not create a sign-in route), but the
+        // answer is the same as for a real account, so this public route cannot be used to find out who
+        // has an account (S12 review; before this it said "No account found for <identifier>").
+        // Per-address limits on this route are in AuthRateLimitInterceptor.
         if (userRepository.findByEmailOrPhone(identifier, identifier).isEmpty()) {
-            throw new UnauthorizedException(
-                    "No account found for " + identifier + ". Please register first.");
+            log.info("OTP requested for an unknown identifier; nothing sent");
+            return buildSendResponse(identifier, identifierType);
         }
 
         // Rate limiting check
@@ -167,7 +168,16 @@ public class OtpServiceImpl implements OtpService {
             throw new UnauthorizedException("Account is inactive. Please contact support.");
         }
 
-        // ✅ FIXED: Create CustomUserDetails and generate JWT token
+        // A correct code delivered to this address proves the person controls it (S11): mark it
+        // verified, so password sign-in (which needs a verified email) works for them afterwards.
+        if (identifier.equalsIgnoreCase(user.getEmail()) && !user.isEmailVerified()) {
+            user.setEmailVerified(true);
+            userRepository.save(user);
+        } else if (identifier.equals(user.getPhone()) && !user.isMobileVerified()) {
+            user.setMobileVerified(true);
+            userRepository.save(user);
+        }
+
         CustomUserDetails userDetails = new CustomUserDetails(user);
         String accessToken = jwtTokenProvider.generateToken(userDetails);
         String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails, clientType);

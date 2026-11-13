@@ -92,6 +92,7 @@ public class PropertyDTO {
     
     // Relationships
     private List<PropertyImageDTO> images;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.propertyapp.storage.ImageUrlSerializer.class)
     private String primaryImageUrl;
     private Set<PropertyAmenityDTO> amenities;
     

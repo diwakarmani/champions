@@ -104,6 +104,22 @@ public interface PropertyMapper {
         return masked;
     }
 
+    /**
+     * The cover photo for a card in a list: its card-size copy (800 px, ADR-0016) when there is one,
+     * else the full photo. Detail pages keep the full photo.
+     */
+    default String getCardImageUrl(Property property) {
+        if (property.getImages() == null || property.getImages().isEmpty()) {
+            return null;
+        }
+        PropertyImage cover = property.getImages().stream()
+                .filter(PropertyImage::isPrimary)
+                .findFirst()
+                .orElse(property.getImages().iterator().next());
+        String card = cover.getThumbnailUrl();
+        return card != null && !card.isBlank() ? card : cover.getImageUrl();
+    }
+
     // Helper method to get primary image URL
     default String getPrimaryImageUrl(Property property) {
         if (property.getImages() == null || property.getImages().isEmpty()) {

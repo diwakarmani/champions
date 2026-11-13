@@ -28,6 +28,7 @@ class PublicRealtorServiceImplTest {
     @Mock PropertyRepository propertyRepository;
     @Mock RealtorUserInteractionRepository interactionRepository;
     @Mock JdbcTemplate jdbcTemplate;
+    @Mock com.propertyapp.repository.realtor.RealtorRatingRepository realtorRatingRepository;
     @InjectMocks PublicRealtorServiceImpl service;
 
     @Test

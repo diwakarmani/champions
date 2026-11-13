@@ -19,6 +19,14 @@ public class CustomUserDetails implements UserDetails {
     public Long getId() {
         return user.getId();
     }
+
+    /**
+     * Not deactivated by an admin and not deleted. Checked on every request with a token (S12):
+     * before this a deactivated account kept using the tokens it already had.
+     */
+    public boolean isAccountActive() {
+        return user.isActive() && !user.isDeleted();
+    }
     
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -54,6 +62,6 @@ public class CustomUserDetails implements UserDetails {
     
     @Override
     public boolean isEnabled() {
-        return user.isEmailVerified() && !user.isDeleted();
+        return user.isEmailVerified() && user.isActive() && !user.isDeleted();
     }
 }

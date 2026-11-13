@@ -12,7 +12,6 @@ import com.propertyapp.repository.user.VerificationTokenRepository;
 import com.propertyapp.security.CustomUserDetails;
 import com.propertyapp.security.JwtTokenProvider;
 import com.propertyapp.service.communication.EmailService;
-import com.propertyapp.util.OtpUtils;
 import com.propertyapp.util.PasswordUtils;
 import com.propertyapp.util.ValidationUtils;
 import lombok.RequiredArgsConstructor;
@@ -35,13 +34,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class AuthServiceImpl implements AuthService {
-    
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final VerificationTokenRepository tokenRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
+
+    private static final String EMAIL_VERIFICATION = "EMAIL_VERIFICATION";
+    private static final String PASSWORD_RESET = "PASSWORD_RESET";
 
     @Value("${app.verification.base-url}")
     private String baseUrl;
@@ -80,13 +82,9 @@ public class AuthServiceImpl implements AuthService {
             throw new DuplicateResourceException("User", "phone", request.getPhone());
         }
 
-        // Assign roles
+        // Public sign-up always creates a buyer. Other roles are only ever granted by an admin.
         Set<Role> roles = new HashSet<>();
-        if (request.getRoles() != null && !request.getRoles().isEmpty()) {
-            roles = roleRepository.findByNameIn(request.getRoles());
-        } else {
-            roleRepository.findByName("BUYER").ifPresent(roles::add);
-        }
+        roleRepository.findByName("BUYER").ifPresent(roles::add);
 
         // Create user
         User user = User.builder()
@@ -110,7 +108,7 @@ public class AuthServiceImpl implements AuthService {
         VerificationToken verificationToken = VerificationToken.builder()
                 .user(user)
                 .token(token)
-                .tokenType("EMAIL_VERIFICATION")
+                .tokenType(EMAIL_VERIFICATION)
                 .expiresAt(LocalDateTime.now().plusHours(expiryHours))
                 .build();
 
@@ -151,25 +149,25 @@ public class AuthServiceImpl implements AuthService {
         </head>
         <body style="font-family: Arial, sans-serif; background-color: #f4f6f8; padding: 20px;">
             <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 30px; border-radius: 8px;">
-                
+
                 <h2 style="color: #2c3e50;">Welcome to Property Management System</h2>
-                
+
                 <p>Hi %s,</p>
-                
+
                 <p>Thank you for registering. Please verify your email address by clicking the button below:</p>
-                
+
                 <div style="text-align: center; margin: 30px 0;">
-                    <a href="%s" 
-                       style="background-color: #007bff; color: white; padding: 12px 20px; 
+                    <a href="%s"
+                       style="background-color: #007bff; color: white; padding: 12px 20px;
                               text-decoration: none; border-radius: 5px; display: inline-block;">
                         Verify Email
                     </a>
                 </div>
-                
+
                 <p>This link will expire in %d hours.</p>
-                
+
                 <p>If you did not register, please ignore this email.</p>
-                
+
                 <hr/>
                 <p style="font-size: 12px; color: gray;">
                     © %d Property Management System
@@ -231,6 +229,10 @@ public class AuthServiceImpl implements AuthService {
                     .build();
 
         } catch (org.springframework.security.authentication.DisabledException d) {
+            // Reached only after a correct password (SecurityConfig post-checks), so it is safe to say why.
+            if (!user.isActive()) {
+                throw new UnauthorizedException("Account is inactive. Please contact support.");
+            }
             throw new DisabledException("Account is disabled");
         } catch (Exception e) {
             // Increment failed login attempts
@@ -251,33 +253,33 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse login(LoginRequest request) {
         log.info("Login attempt for user: {}", request.getEmail());
-        
+
         // Find user
         User user = userRepository.findByEmailAndDeletedAtIsNull(request.getEmail())
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
-        
+
         // Check if account is locked
         if (user.isLocked()) {
             throw new UnauthorizedException("Account is locked. Please contact support.");
         }
-        
+
         try {
             // Authenticate
             Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
             );
-            
+
             // Update last login
             user.updateLastLogin(request.getIpAddress());
             userRepository.save(user);
-            
+
             // Generate tokens
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
             String accessToken = jwtTokenProvider.generateToken(userDetails);
             String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails);
-            
+
             log.info("User logged in successfully: {}", request.getEmail());
-            
+
             return AuthResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
@@ -301,26 +303,27 @@ public class AuthServiceImpl implements AuthService {
                 user.setLocked(true);
                 log.warn("Account locked due to multiple failed login attempts: {}", request.getEmail());
             }
-            
+
             userRepository.save(user);
             throw new UnauthorizedException("Invalid credentials");
         }
     }
-    
+
     @Override
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         String refreshToken = request.getRefreshToken();
-        
+
         try {
             String email = jwtTokenProvider.extractUsername(refreshToken);
             User user = userRepository.findByEmailAndDeletedAtIsNull(email)
                     .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
-            
+
             CustomUserDetails userDetails = new CustomUserDetails(user);
-            
-            if (jwtTokenProvider.isTokenValid(refreshToken, userDetails)) {
+
+            // A deactivated account cannot renew its session (S12).
+            if (userDetails.isAccountActive() && jwtTokenProvider.isRefreshTokenValid(refreshToken, userDetails)) {
                 String newAccessToken = jwtTokenProvider.generateToken(userDetails);
-                
+
                 return AuthResponse.builder()
                         .accessToken(newAccessToken)
                         .refreshToken(refreshToken)
@@ -329,86 +332,91 @@ public class AuthServiceImpl implements AuthService {
                         .message("Token refreshed successfully")
                         .build();
             }
-            
+
             throw new UnauthorizedException("Invalid refresh token");
-            
+
         } catch (Exception e) {
             log.error("Error refreshing token", e);
             throw new UnauthorizedException("Invalid refresh token");
         }
     }
-    
+
     @Override
     @Transactional
     public void verifyEmail(String token) {
-        log.info("Verifying email with token: {}", token);
-        
+        log.info("Verifying an email address");
+
         VerificationToken verificationToken = tokenRepository.findByToken(token)
+                .filter(t -> EMAIL_VERIFICATION.equals(t.getTokenType()))
                 .orElseThrow(() -> new BadRequestException("Invalid verification token"));
-        
+
         if (verificationToken.isUsed()) {
             throw new BadRequestException("Token already used");
         }
-        
+
         if (verificationToken.isExpired()) {
             throw new BadRequestException("Token expired");
         }
-        
+
         User user = verificationToken.getUser();
         user.setEmailVerified(true);
         userRepository.save(user);
-        
+
         verificationToken.markAsUsed();
         tokenRepository.save(verificationToken);
-        
+
         log.info("Email verified successfully for user: {}", user.getEmail());
     }
-    
+
     @Override
     @Transactional
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000))
     public void resendVerificationEmail(String email) {
         log.info("Resending verification email to: {}", email);
-        
+
         User user = userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        
+
         if (user.isEmailVerified()) {
             throw new BadRequestException("Email already verified");
         }
-        
+
         // Generate new token
         String token = UUID.randomUUID().toString();
         VerificationToken verificationToken = VerificationToken.builder()
                 .user(user)
                 .token(token)
-                .tokenType("EMAIL_VERIFICATION")
+                .tokenType(EMAIL_VERIFICATION)
                 .expiresAt(LocalDateTime.now().plusHours(24))
                 .build();
-        
+
         tokenRepository.save(verificationToken);
-        
+
         // TODO: Send verification email
         log.info("Verification email resent to: {}", email);
     }
-    
+
     @Override
     @Transactional
     public void forgotPassword(String email) {
         log.info("Password reset requested for: {}", email);
-        
-        User user = userRepository.findByEmailAndDeletedAtIsNull(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        
+
+        // Same answer whether or not the account exists, so this form cannot be used to find accounts.
+        User user = userRepository.findByEmailAndDeletedAtIsNull(email).orElse(null);
+        if (user == null || !user.isActive()) {
+            log.info("Password reset requested for an unknown or inactive account");
+            return;
+        }
+
         // Generate reset token
         String token = UUID.randomUUID().toString();
         VerificationToken resetToken = VerificationToken.builder()
                 .user(user)
                 .token(token)
-                .tokenType("PASSWORD_RESET")
+                .tokenType(PASSWORD_RESET)
                 .expiresAt(LocalDateTime.now().plusHours(1))
                 .build();
-        
+
         tokenRepository.save(resetToken);
 
         String htmlContent = buildPasswordResetEmailTemplate(user.getFirstName(), token);
@@ -420,7 +428,7 @@ public class AuthServiceImpl implements AuthService {
 
         log.info("Password reset email triggered for: {}", email);
     }
-    
+
     private String buildPasswordResetEmailTemplate(String firstName, String token) {
         return """
         <!DOCTYPE html>
@@ -456,33 +464,35 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public void resetPassword(PasswordResetRequest request) {
         log.info("Resetting password with token");
-        
+
+        // Only a password-reset token resets a password: an email-verification token must not.
         VerificationToken resetToken = tokenRepository.findByToken(request.getToken())
+                .filter(t -> PASSWORD_RESET.equals(t.getTokenType()))
                 .orElseThrow(() -> new BadRequestException("Invalid reset token"));
-        
+
         if (resetToken.isUsed()) {
             throw new BadRequestException("Token already used");
         }
-        
+
         if (resetToken.isExpired()) {
             throw new BadRequestException("Token expired");
         }
-        
+
         if (!ValidationUtils.isValidPassword(request.getNewPassword())) {
             throw new BadRequestException(
                 "Password must be at least 8 characters with uppercase, lowercase, number and special character"
             );
         }
-        
+
         User user = resetToken.getUser();
         user.setPasswordHash(PasswordUtils.hash(request.getNewPassword()));
         user.resetFailedLoginAttempts();
         user.setLocked(false);
         userRepository.save(user);
-        
+
         resetToken.markAsUsed();
         tokenRepository.save(resetToken);
-        
+
         log.info("Password reset successfully for user: {}", user.getEmail());
     }
 }

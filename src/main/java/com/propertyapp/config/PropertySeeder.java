@@ -89,9 +89,9 @@ public class PropertySeeder implements CommandLineRunner {
     private static List<String> photosForType(String typeName) {
         if (typeName == null) return HOUSE_PHOTOS;
         return switch (typeName) {
-            case "Apartment" -> APARTMENT_PHOTOS;
-            case "Villa"     -> VILLA_PHOTOS;
-            case "Penthouse" -> PENTHOUSE_PHOTOS;
+            case "Apartment", "Condo" -> APARTMENT_PHOTOS;
+            case "Townhouse" -> PENTHOUSE_PHOTOS;
+            case "Single Family Home" -> VILLA_PHOTOS;
             default          -> HOUSE_PHOTOS;
         };
     }
@@ -102,12 +102,11 @@ public class PropertySeeder implements CommandLineRunner {
     private static final int PER_CITY = 4;
 
     /**
-     * Only residential types are seeded — a buyer/renter feed of "4 BHK
-     * Agricultural Land" reads as broken. Falls back to all types if none of
-     * these names exist.
+     * Only residential types are seeded: a buyer/renter feed of "4 Bed Land"
+     * reads as broken. Falls back to all types if none of these names exist.
      */
     private static final List<String> RESIDENTIAL_TYPES = List.of(
-            "Apartment", "Villa", "Independent House", "Penthouse");
+            "Single Family Home", "Condo", "Townhouse", "Apartment");
 
     @Override
     @Transactional
@@ -130,7 +129,7 @@ public class PropertySeeder implements CommandLineRunner {
             log.warn("No cities/property types found — cannot seed demo properties");
             return;
         }
-        // Seed only residential types so every listing reads naturally as "N BHK ...".
+        // Seed only residential types so every listing reads naturally as "N Bed ...".
         List<PropertyType> types = allTypes.stream()
                 .filter(t -> RESIDENTIAL_TYPES.contains(t.getName()))
                 .toList();
@@ -138,14 +137,11 @@ public class PropertySeeder implements CommandLineRunner {
             types = allTypes;
         }
 
-        // Owners: seeded SELLER + REALTOR. Falls back to any user so the seed
-        // still runs if the demo accounts were customised.
-        User seller = findUser("seller@propertyapp.com")
-                .or(() -> userRepository.findAll().stream().findFirst())
-                .orElse(null);
-        User realtor = findUser("realtor@propertyapp.com").orElse(seller);
-        if (seller == null) {
-            log.warn("No users found — cannot seed demo properties");
+        // Every listing belongs to an agent (ADR-0005).
+        User realtor = findUser("realtor@propertyapp.com").orElse(null);
+        User realtorTwo = findUser("realtor2@propertyapp.com").orElse(realtor);
+        if (realtor == null) {
+            log.warn("No demo agent found: cannot seed demo properties");
             return;
         }
 
@@ -182,9 +178,9 @@ public class PropertySeeder implements CommandLineRunner {
                 String ownershipType = "FREEHOLD";
                 String possessionStatus = forRent ? "READY_TO_MOVE" : (seq % 5 == 0 ? "WITHIN_3_MONTHS" : "READY_TO_MOVE");
                 String kitchenType = switch (type.getName()) {
-                    case "Penthouse" -> "MODULAR_KITCHEN";
+                    case "Townhouse" -> "MODULAR_KITCHEN";
                     case "Apartment" -> seq % 3 == 0 ? "OPEN_KITCHEN" : "MODULAR_KITCHEN";
-                    case "Villa"     -> seq % 2 == 0 ? "MODULAR_KITCHEN" : "OPEN_KITCHEN";
+                    case "Single Family Home" -> seq % 2 == 0 ? "MODULAR_KITCHEN" : "OPEN_KITCHEN";
                     default          -> seq % 3 == 0 ? "MODULAR_KITCHEN" : "CLOSED_KITCHEN";
                 };
                 String waterSupply = seq % 3 == 0 ? "CORPORATION_WATER" : "24_7_SUPPLY";
@@ -196,7 +192,7 @@ public class PropertySeeder implements CommandLineRunner {
                                 + ". " + FURNISHING[seq % 3].toLowerCase().replace('_', ' ')
                                 + ", well-connected and move-in ready.")
                         .propertyType(type)
-                        .owner(j % 2 == 0 ? seller : realtor)
+                        .owner(j % 2 == 0 ? realtorTwo : realtor)
                         .listingType(forRent ? "RENT" : "SALE")
                         .price(BigDecimal.valueOf(price))
                         .addressLine1((100 + seq) + " " + localityName + " Ave")

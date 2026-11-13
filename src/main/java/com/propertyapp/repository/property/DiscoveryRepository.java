@@ -21,6 +21,7 @@ public interface DiscoveryRepository extends JpaRepository<Property, Long> {
     AND (:city IS NULL OR dc.city = :city)
     AND p.deleted_at IS NULL
     AND p.status = 'ACTIVE'
+    AND p.owner_id IN (SELECT user_id FROM active_listing_agents)
     ORDER BY dc.rank ASC
     LIMIT :limit
 """, nativeQuery = true)
@@ -34,6 +35,7 @@ public interface DiscoveryRepository extends JpaRepository<Property, Long> {
     @Query(value = """
         SELECT * FROM properties
         WHERE status = 'ACTIVE'
+        AND owner_id IN (SELECT user_id FROM active_listing_agents)
         AND deleted_at IS NULL
         ORDER BY location <->
         ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
@@ -56,13 +58,14 @@ p.city as city,
 p.locality as locality,
 p.bedrooms as bedrooms,
 p.furnished_status as furnishedStatus,
-pi.image_url as primaryImageUrl,
+COALESCE(NULLIF(pi.thumbnail_url, ''), pi.image_url) as primaryImageUrl,
 p.is_verified as verified,
 p.is_premium as premium,
 null as distanceInKm
 FROM properties p
 LEFT JOIN property_images pi ON p.id = pi.property_id AND pi.is_primary = true
 WHERE p.status = 'ACTIVE'
+AND p.owner_id IN (SELECT user_id FROM active_listing_agents)
 AND p.deleted_at IS NULL
 AND (:city IS NULL OR p.city = :city)
 ORDER BY CASE WHEN pi.image_url IS NOT NULL THEN 0 ELSE 1 END ASC, p.created_at DESC
@@ -84,7 +87,7 @@ p.city as city,
 p.locality as locality,
 p.bedrooms as bedrooms,
 p.furnished_status as furnishedStatus,
-pi.image_url as primaryImageUrl,
+COALESCE(NULLIF(pi.thumbnail_url, ''), pi.image_url) as primaryImageUrl,
 p.is_verified as verified,
 p.is_premium as premium,
 null as distanceInKm
@@ -96,6 +99,7 @@ AND dc.category = :category
 AND (:city IS NULL OR dc.city = :city)
 AND p.deleted_at IS NULL
 AND p.status = 'ACTIVE'
+AND p.owner_id IN (SELECT user_id FROM active_listing_agents)
 ORDER BY CASE WHEN pi.image_url IS NOT NULL THEN 0 ELSE 1 END ASC, dc.rank ASC
 LIMIT :limit
 """, nativeQuery = true)
@@ -117,7 +121,7 @@ p.city as city,
 p.locality as locality,
 p.bedrooms as bedrooms,
 p.furnished_status as furnishedStatus,
-pi.image_url as primaryImageUrl,
+COALESCE(NULLIF(pi.thumbnail_url, ''), pi.image_url) as primaryImageUrl,
 p.is_verified as verified,
 p.is_premium as premium,
 ST_Distance(
@@ -127,6 +131,7 @@ ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
 FROM properties p
 LEFT JOIN property_images pi ON p.id = pi.property_id AND pi.is_primary = true
 WHERE p.status = 'ACTIVE'
+AND p.owner_id IN (SELECT user_id FROM active_listing_agents)
 AND p.deleted_at IS NULL
 ORDER BY CASE WHEN pi.image_url IS NOT NULL THEN 0 ELSE 1 END ASC,
 p.location <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
@@ -149,7 +154,7 @@ LIMIT :limit
         p.locality as locality,
         p.bedrooms as bedrooms,
         p.furnished_status as furnishedStatus,
-        pi.image_url as primaryImageUrl,
+        COALESCE(NULLIF(pi.thumbnail_url, ''), pi.image_url) as primaryImageUrl,
         p.is_verified as verified,
         p.is_premium as premium,
         null as distanceInKm
@@ -161,6 +166,7 @@ LIMIT :limit
     AND (:city IS NULL OR p.city = :city)
     AND p.deleted_at IS NULL
     AND p.status = 'ACTIVE'
+    AND p.owner_id IN (SELECT user_id FROM active_listing_agents)
     ORDER BY CASE WHEN pi.image_url IS NOT NULL THEN 0 ELSE 1 END ASC, dc.rank ASC
 """,
             countQuery = """
@@ -172,6 +178,7 @@ LIMIT :limit
     AND (:city IS NULL OR p.city = :city)
     AND p.deleted_at IS NULL
     AND p.status = 'ACTIVE'
+    AND p.owner_id IN (SELECT user_id FROM active_listing_agents)
 """,
             nativeQuery = true)
     Page<PropertyCardProjection> getViewMore(
@@ -185,11 +192,12 @@ LIMIT :limit
     @Query(value = """
 SELECT p.id as id, p.title as title, p.listing_type as listingType, p.price as price,
 p.city as city, p.locality as locality, p.bedrooms as bedrooms,
-p.furnished_status as furnishedStatus, pi.image_url as primaryImageUrl,
+p.furnished_status as furnishedStatus, COALESCE(NULLIF(pi.thumbnail_url, ''), pi.image_url) as primaryImageUrl,
 p.is_verified as verified, p.is_premium as premium, null as distanceInKm
 FROM properties p
 LEFT JOIN property_images pi ON p.id = pi.property_id AND pi.is_primary = true
-WHERE p.status = 'ACTIVE' AND p.deleted_at IS NULL
+WHERE p.status = 'ACTIVE'
+AND p.owner_id IN (SELECT user_id FROM active_listing_agents) AND p.deleted_at IS NULL
 AND (:city IS NULL OR p.city = :city)
 ORDER BY CASE WHEN pi.image_url IS NOT NULL THEN 0 ELSE 1 END ASC, p.created_at DESC
 """,

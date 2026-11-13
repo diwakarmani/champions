@@ -14,6 +14,7 @@ import com.propertyapp.repository.inquiry.InquiryRepository;
 import com.propertyapp.repository.property.PropertyRepository;
 import com.propertyapp.repository.realtor.RealtorRatingRepository;
 import com.propertyapp.repository.user.UserRepository;
+import com.propertyapp.service.property.PropertyVisibility;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -42,6 +43,7 @@ public class RealtorRatingServiceImpl implements RealtorRatingService {
     @Transactional
     public RatingDTO submitRating(Long realtorId, Long raterId, CreateRatingRequest request) {
         Long propertyId = request.getPropertyId();
+        User realtor = requireActiveRealtor(realtorId); // a hidden agent does not exist: 404 before eligibility
 
         if (!isEligibleToRate(realtorId, raterId, propertyId)) {
             throw new BadRequestException(
@@ -49,7 +51,6 @@ public class RealtorRatingServiceImpl implements RealtorRatingService {
                     "(or after the eligibility period from your first contact)");
         }
 
-        User realtor = requireActiveRealtor(realtorId);
         User rater   = userRepository.findByIdAndDeletedAtIsNull(raterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", raterId));
         Property property = propertyRepository.findByIdAndDeletedAtIsNull(propertyId)
@@ -103,9 +104,8 @@ public class RealtorRatingServiceImpl implements RealtorRatingService {
     private User requireActiveRealtor(Long realtorId) {
         User realtor = userRepository.findByIdAndDeletedAtIsNull(realtorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Realtor", "id", realtorId));
-        boolean isRealtor = realtor.getRoles().stream()
-                .anyMatch(r -> "REALTOR".equals(r.getName()));
-        if (!realtor.isActive() || !isRealtor) {
+        // Same rule as the public profile: a suspended agent's ratings are hidden too (ADR-0004 Am. 1).
+        if (!PropertyVisibility.isActiveAgent(realtor)) {
             throw new ResourceNotFoundException("Realtor", "id", realtorId);
         }
         return realtor;

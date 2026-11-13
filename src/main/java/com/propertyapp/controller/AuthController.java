@@ -1,5 +1,6 @@
 package com.propertyapp.controller;
 
+import com.propertyapp.security.ratelimit.ClientIpResolver;
 import com.propertyapp.dto.auth.*;
 import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.enums.ClientType;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Authentication", description = "Authentication management APIs")
 public class AuthController {
 
+    private final ClientIpResolver clientIpResolver;
     private final AuthService authService;
 
     @PostMapping("/register")
@@ -107,14 +109,8 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Password reset successful", null));
     }
 
+    /** Forwarded headers count only from trusted proxies (ADR-0007 Amendment 1). */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return ip;
+        return clientIpResolver.resolve(request);
     }
 }

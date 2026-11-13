@@ -36,6 +36,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u JOIN u.roles r WHERE r.name = :roleName AND u.deletedAt IS NULL")
     Page<User> findByRole(@Param("roleName") String roleName, Pageable pageable);
     
+    @Query("SELECT u FROM User u JOIN u.roles r WHERE r.name = :roleName AND u.deletedAt IS NULL "
+            + "AND u.agentSuspendedAt IS NOT NULL")
+    Page<User> findSuspendedByRole(@Param("roleName") String roleName, Pageable pageable);
+
+    @Query("SELECT u FROM User u JOIN u.roles r WHERE r.name = :roleName AND u.deletedAt IS NULL "
+            + "AND u.agentSuspendedAt IS NULL")
+    Page<User> findNotSuspendedByRole(@Param("roleName") String roleName, Pageable pageable);
+
+    /** Same rule as PropertyVisibility.isActiveAgent: for the public agent sitemap. */
+    @Query("SELECT u FROM User u JOIN u.roles r WHERE r.name = 'REALTOR' AND u.isActive = true "
+            + "AND u.deletedAt IS NULL AND u.agentSuspendedAt IS NULL")
+    Page<User> findActiveAgents(Pageable pageable);
+
     Page<User> findAllByDeletedAtIsNull(Pageable pageable);
 
     // Find by email or phone — used by OTP flow; excludes soft-deleted accounts,

@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import com.propertyapp.security.ratelimit.AuthRateLimitInterceptor;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -13,6 +15,18 @@ import java.util.Arrays;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+
+    private final AuthRateLimitInterceptor authRateLimitInterceptor;
+
+    public WebConfig(AuthRateLimitInterceptor authRateLimitInterceptor) {
+        this.authRateLimitInterceptor = authRateLimitInterceptor;
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(authRateLimitInterceptor)
+                .addPathPatterns(authRateLimitInterceptor.paths().toArray(String[]::new));
+    }
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;

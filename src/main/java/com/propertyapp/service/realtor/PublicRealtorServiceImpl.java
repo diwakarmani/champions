@@ -11,6 +11,7 @@ import com.propertyapp.repository.property.PropertyRepository;
 import com.propertyapp.repository.realtor.RealtorRatingRepository;
 import com.propertyapp.repository.realtor.RealtorUserInteractionRepository;
 import com.propertyapp.repository.user.UserRepository;
+import com.propertyapp.service.property.PropertyVisibility;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import lombok.RequiredArgsConstructor;
@@ -110,9 +111,7 @@ public class PublicRealtorServiceImpl implements PublicRealtorService {
     private User requireActiveRealtor(Long realtorId) {
         User realtor = userRepository.findByIdAndDeletedAtIsNull(realtorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Realtor", "id", realtorId));
-        boolean hasRealtorRole = realtor.getRoles().stream().anyMatch(
-                role -> "REALTOR".equals(role.getName()));
-        if (!realtor.isActive() || !hasRealtorRole) {
+        if (!PropertyVisibility.isActiveAgent(realtor)) {
             throw new ResourceNotFoundException("Realtor", "id", realtorId);
         }
         return realtor;

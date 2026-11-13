@@ -22,7 +22,8 @@ public class PropertyContactEvent extends AuditableEntity {
     @JoinColumn(name = "property_id", nullable = false)
     private Property property;
 
+    /** Null when a guest revealed the contact (ADR-0007). */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User contactedBy;
 }

@@ -1,5 +1,6 @@
 package com.propertyapp.controller;
 
+import com.propertyapp.security.ratelimit.ClientIpResolver;
 import com.propertyapp.dto.auth.*;
 import com.propertyapp.dto.common.ApiResponse;
 import com.propertyapp.enums.ClientType;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "OTP Authentication", description = "OTP-based login APIs")
 public class OtpAuthController {
     
+    private final ClientIpResolver clientIpResolver;
     private final OtpService otpService;
     
     @PostMapping("/send")
@@ -58,14 +60,8 @@ public class OtpAuthController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
     
+    /** Forwarded headers count only from trusted proxies (ADR-0007 Amendment 1). */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return ip;
+        return clientIpResolver.resolve(request);
     }
 }

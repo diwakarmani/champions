@@ -9,9 +9,12 @@ import org.aspectj.lang.annotation.Pointcut;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 /**
- * Aspect for logging controller and service method executions
+ * Logs controller calls. Arguments are logged by type only, with numbers, booleans and enums as
+ * values: request bodies carry passwords, one-time codes, tokens and guests' contact details, and
+ * none of that may reach the log file.
  */
 @Aspect
 @Component
@@ -34,7 +37,7 @@ public class LoggingAspect {
         String correlationId = CorrelationIdUtils.get();
         
         log.info("[{}] Executing {}.{}() with arguments: {}", 
-                correlationId, className, methodName, Arrays.toString(joinPoint.getArgs()));
+                correlationId, className, methodName, describe(joinPoint.getArgs()));
         
         long startTime = System.currentTimeMillis();
         
@@ -53,5 +56,23 @@ public class LoggingAspect {
                     correlationId, className, methodName, executionTime, e.getMessage(), e);
             throw e;
         }
+    }
+
+    /** Ids and flags help tracing; anything that can hold text is reduced to its type name. */
+    static String describe(Object[] args) {
+        if (args == null) {
+            return "[]";
+        }
+        return Arrays.stream(args).map(LoggingAspect::describeOne).collect(Collectors.joining(", ", "[", "]"));
+    }
+
+    private static String describeOne(Object arg) {
+        if (arg == null) {
+            return "null";
+        }
+        if (arg instanceof Number || arg instanceof Boolean || arg instanceof Enum<?>) {
+            return String.valueOf(arg);
+        }
+        return arg.getClass().getSimpleName();
     }
 }

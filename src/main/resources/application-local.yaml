@@ -2,15 +2,7 @@ spring:
   application:
     name: property-management-system
 
-  # Local dev runs against a real local Postgres+PostGIS (docker), NOT Supabase.
-  # Start it with:  cd property-db && docker compose up -d   (see DEV_SETUP.md)
-  sql:
-    init:
-      # Runs postgres.sql (PostGIS geo column, interaction/discovery tables)
-      # AFTER Hibernate has created the entity schema (defer flag below).
-      mode: always
-      schema-locations: classpath:postgres.sql
-      continue-on-error: true
+  # Local dev runs against a real local Postgres+PostGIS. Flyway owns the schema (ADR-0015).
 
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/propertydb}
@@ -27,13 +19,9 @@ spring:
 
   jpa:
     hibernate:
-      # Local dev: Hibernate is the schema authority (fast iteration, no drift).
-      ddl-auto: ${DDL_AUTO:update}
+      ddl-auto: ${DDL_AUTO:validate}
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: false
-    # Run spring.sql.init scripts AFTER Hibernate DDL so postgres.sql can
-    # ALTER the entity-created tables.
-    defer-datasource-initialization: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -157,6 +145,10 @@ app:
   maintenance:
     cron: "*/30 * * * * *"
     auto-contact-seconds: 30
+
+  # Demo buyer/seller/realtor accounts. Local and test only (see ProductionConfigGuard).
+  seed:
+    demo-users: true
 
   admin:
     email: ${ADMIN_EMAIL:admin@propertyapp.com}

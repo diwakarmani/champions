@@ -1,0 +1,20 @@
+# Tests run only against Testcontainers. This URL is deliberately unreachable, so a test
+# without a container fails fast rather than touching a developer's or production database.
+spring:
+  datasource:
+    url: jdbc:postgresql://tests-must-use-testcontainers.invalid:5432/none
+    username: none
+    password: none
+
+app:
+  seed:
+    demo-users: true
+  # Many tests sign in from one address. AuthRateLimitIntegrationTest turns the limits back on.
+  rate-limit:
+    auth:
+      enabled: false
+  # Existing tests attach photos on img.example; StorageIntegrationTest checks other hosts are refused.
+  storage:
+    external-hosts: images.unsplash.com,img.example
+  upload:
+    dir: target/test-uploads/

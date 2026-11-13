@@ -51,6 +51,9 @@ public class DataInitializer implements CommandLineRunner {
     private final CityRepository cityRepository;
     private final LocalityRepository localityRepository;
 
+    @Value("${app.seed.demo-users:false}")
+    private boolean seedDemoUsers;
+
     @Value("${app.admin.email:admin@propertyapp.com}")
     private String adminEmail;
 
@@ -70,7 +73,9 @@ public class DataInitializer implements CommandLineRunner {
 
         initializeRoles();
         initializeAdminUser();
-        initializeDemoUsers();
+        if (seedDemoUsers) {
+            initializeDemoUsers();
+        }
         initializePropertyTypes();
         initializePropertySubTypes();
         initializePropertyAmenities();
@@ -134,7 +139,7 @@ public class DataInitializer implements CommandLineRunner {
         record DemoUser(String email, String firstName, String lastName, String role) {}
         List<DemoUser> demos = List.of(
                 new DemoUser("buyer@propertyapp.com",   "Demo",  "Buyer",   "BUYER"),
-                new DemoUser("seller@propertyapp.com",  "Demo",  "Seller",  "SELLER"),
+                new DemoUser("realtor2@propertyapp.com", "Demo",  "AgentTwo", "REALTOR"),
                 new DemoUser("realtor@propertyapp.com", "Demo",  "Realtor", "REALTOR")
         );
         for (DemoUser d : demos) {
@@ -164,15 +169,14 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Initializing property types...");
 
         String[][] propertyTypesData = {
-            {"Apartment", "Multi-story residential building with individual units"},
-            {"Villa", "Standalone luxury house with private amenities"},
-            {"Independent House", "Standalone residential house"},
-            {"Plot", "Land for construction"},
-            {"Commercial Space", "Office or retail space"},
-            {"Warehouse", "Industrial storage facility"},
-            {"Agricultural Land", "Farmland for agricultural purposes"},
-            {"Penthouse", "Luxury apartment on top floor"},
-            {"Studio Apartment", "Compact single-room living space"}
+            {"Single Family Home", "Detached house on its own lot"},
+            {"Condo", "Individually owned unit in a shared building"},
+            {"Townhouse", "Multi-floor home sharing walls with its neighbors"},
+            {"Apartment", "Rental unit in a residential building"},
+            {"Multi-Family", "Duplex, triplex or small apartment building"},
+            {"Manufactured Home", "Factory-built home"},
+            {"Land", "Vacant land or lot"},
+            {"Commercial", "Office, retail or industrial property"}
         };
 
         for (int i = 0; i < propertyTypesData.length; i++) {
@@ -195,6 +199,8 @@ public class DataInitializer implements CommandLineRunner {
     private void initializePropertyAmenities() {
         log.info("Initializing property amenities...");
 
+        // US list (ADR-0014 Amendment 2). V5 renamed or hid the older India-market rows; any name
+        // missing here is never re-created, so hidden rows stay hidden.
         String[][] amenitiesData = {
             // Safety & Security
             {"24/7 Security", "fa-shield", "SAFETY"},
@@ -204,39 +210,42 @@ public class DataInitializer implements CommandLineRunner {
 
             // Recreation
             {"Swimming Pool", "fa-swimming-pool", "RECREATION"},
-            {"Gymnasium", "fa-dumbbell", "RECREATION"},
-            {"Children's Play Area", "fa-child", "RECREATION"},
+            {"Fitness Center", "fa-dumbbell", "RECREATION"},
+            {"Playground", "fa-child", "RECREATION"},
             {"Clubhouse", "fa-home", "RECREATION"},
             {"Garden", "fa-tree", "RECREATION"},
-            {"Sports Facility", "fa-basketball-ball", "RECREATION"},
+            {"Sports Court", "fa-basketball-ball", "RECREATION"},
 
             // Utilities
-            {"Power Backup", "fa-bolt", "UTILITIES"},
-            {"Water Supply", "fa-tint", "UTILITIES"},
-            {"Gas Pipeline", "fa-burn", "UTILITIES"},
-            {"Waste Disposal", "fa-trash", "UTILITIES"},
-            {"Sewage Treatment", "fa-recycle", "UTILITIES"},
+            {"Backup Generator", "fa-bolt", "UTILITIES"},
+            {"Trash Pickup", "fa-trash", "UTILITIES"},
 
             // Parking & Access
             {"Covered Parking", "fa-car", "PARKING"},
             {"Open Parking", "fa-parking", "PARKING"},
             {"Visitor Parking", "fa-car-side", "PARKING"},
-            {"Lift", "fa-elevator", "ACCESS"},
+            {"Attached Garage", "fa-warehouse", "PARKING"},
+            {"Elevator", "fa-elevator", "ACCESS"},
             {"Wheelchair Access", "fa-wheelchair", "ACCESS"},
 
-            // Modern Amenities
-            {"Air Conditioning", "fa-snowflake", "MODERN"},
-            {"Internet/WiFi", "fa-wifi", "MODERN"},
+            // In the home
+            {"Central Air", "fa-snowflake", "MODERN"},
+            {"High-Speed Internet", "fa-wifi", "MODERN"},
             {"Intercom", "fa-phone", "MODERN"},
-            {"Modular Kitchen", "fa-utensils", "MODERN"},
-            {"Piped Gas", "fa-fire", "MODERN"},
+            {"Washer/Dryer In Unit", "fa-soap", "MODERN"},
+            {"Dishwasher", "fa-utensils", "MODERN"},
+            {"Fireplace", "fa-fire", "MODERN"},
+            {"Hardwood Floors", "fa-border-all", "MODERN"},
+            {"Walk-in Closet", "fa-door-open", "MODERN"},
+            {"Patio/Balcony", "fa-sun", "MODERN"},
+            {"Pet Friendly", "fa-paw", "MODERN"},
 
-            // Services
-            {"Maintenance Staff", "fa-tools", "SERVICES"},
-            {"Laundry Service", "fa-soap", "SERVICES"},
-            {"Shopping Complex", "fa-shopping-cart", "SERVICES"},
-            {"School/College", "fa-school", "SERVICES"},
-            {"Hospital", "fa-hospital", "SERVICES"}
+            // Services and nearby
+            {"On-site Maintenance", "fa-tools", "SERVICES"},
+            {"On-site Laundry", "fa-soap", "SERVICES"},
+            {"Near Shopping", "fa-shopping-cart", "SERVICES"},
+            {"Near Schools", "fa-school", "SERVICES"},
+            {"Near Hospital", "fa-hospital", "SERVICES"}
         };
 
         for (int i = 0; i < amenitiesData.length; i++) {
@@ -384,52 +393,33 @@ public class DataInitializer implements CommandLineRunner {
 
         return switch (typeName) {
 
+            case "Single Family Home" -> new String[]{
+                    "Ranch", "Colonial", "Craftsman", "Contemporary",
+                    "Bungalow", "Cottage", "Split-Level", "Luxury Estate"
+            };
+
+            case "Condo" -> new String[]{
+                    "Studio", "High-Rise", "Mid-Rise", "Low-Rise", "Loft", "Penthouse"
+            };
+
+            case "Townhouse" -> new String[]{
+                    "End Unit", "Interior Unit", "Row Home"
+            };
+
             case "Apartment" -> new String[]{
-                    "1 RK", "1 BHK", "1.5 BHK", "2 BHK", "2.5 BHK",
-                    "3 BHK", "3.5 BHK", "4 BHK", "4+ BHK",
-                    "Studio Apartment", "Penthouse",
-                    "Serviced Apartment", "Loft Apartment",
-                    "Duplex Apartment", "Triplex Apartment"
+                    "Studio", "Garden Style", "High-Rise", "Loft", "Serviced Apartment"
             };
 
-            case "Villa" -> new String[]{
-                    "Luxury Villa", "Duplex Villa", "Triplex Villa",
-                    "Row Villa", "Independent Villa",
-                    "Farm Villa", "Beach Villa", "Hill View Villa"
+            case "Multi-Family" -> new String[]{
+                    "Duplex", "Triplex", "Fourplex", "Apartment Building"
             };
 
-            case "Independent House" -> new String[]{
-                    "1 BHK House", "2 BHK House", "3 BHK House",
-                    "4 BHK House", "Bungalow",
-                    "Duplex House", "Triplex House",
-                    "Row House", "Corner House", "Farm House"
+            case "Land" -> new String[]{
+                    "Residential Lot", "Commercial Lot", "Farm or Ranch", "Waterfront Lot"
             };
 
-            case "Commercial Space" -> new String[]{
-                    "Office Space", "Co-working Space",
-                    "Retail Shop", "Showroom",
-                    "Business Center", "IT Park Office",
-                    "Commercial Floor", "Commercial Building",
-                    "Mall Space", "Food Court Space"
-            };
-
-            case "Warehouse" -> new String[]{
-                    "Cold Storage", "Godown", "Industrial Shed",
-                    "Distribution Center", "Logistics Warehouse",
-                    "Manufacturing Unit"
-            };
-
-            case "Agricultural Land" -> new String[]{
-                    "Farmland", "Orchard", "Plantation",
-                    "Dairy Farm Land", "Poultry Farm Land",
-                    "Greenhouse Farm"
-            };
-
-            case "Plot" -> new String[]{
-                    "Residential Plot", "Commercial Plot",
-                    "Industrial Plot", "Corner Plot",
-                    "Gated Community Plot", "Farm Plot",
-                    "NA Plot"
+            case "Commercial" -> new String[]{
+                    "Office", "Retail", "Warehouse", "Industrial", "Mixed Use", "Hospitality"
             };
 
             default -> new String[0];

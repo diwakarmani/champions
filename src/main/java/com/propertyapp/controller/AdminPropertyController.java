@@ -7,6 +7,8 @@ import com.propertyapp.service.property.PropertyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.propertyapp.dto.property.ReassignListingRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -55,6 +57,15 @@ public class AdminPropertyController {
     public ResponseEntity<ApiResponse<PropertyDTO>> approve(@PathVariable Long id) {
         PropertyDTO dto = propertyService.approveProperty(id);
         return ResponseEntity.ok(ApiResponse.success("Property approved", dto));
+    }
+
+    @PostMapping("/{id}/reassign")
+    @Operation(summary = "Move a listing, with its enquiries, to another active agent")
+    public ResponseEntity<ApiResponse<PropertyDTO>> reassign(
+            @PathVariable Long id,
+            @Valid @RequestBody ReassignListingRequest request) {
+        PropertyDTO dto = propertyService.reassignListing(id, request.getAgentId());
+        return ResponseEntity.ok(ApiResponse.success("Listing reassigned", dto));
     }
 
     @PostMapping("/{id}/reject")

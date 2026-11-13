@@ -19,6 +19,7 @@ public class UserDTO {
     private String phone;
     private String firstName;
     private String lastName;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.propertyapp.storage.ImageUrlSerializer.class)
     private String profileImageUrl;
     private LocalDate dateOfBirth;
     private String gender;
@@ -33,6 +34,9 @@ public class UserDTO {
     @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     private boolean active;
     
+    /** Clients read this from /me to explain why listing actions are blocked (ADR-0004). */
+    private boolean agentSuspended;
+
     private LocalDateTime lastLoginAt;
     private Set<String> roles;
     private List<UserAddressDTO> addresses;

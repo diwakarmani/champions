@@ -23,14 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -48,33 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("test")
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ReportedBugsIntegrationTest {
-
-    private static final DockerImageName POSTGIS = DockerImageName
-            .parse("postgis/postgis:17-3.4")
-            .asCompatibleSubstituteFor("postgres");
-
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(POSTGIS)
-            .withDatabaseName("property_test")
-            .withUsername("property_test")
-            .withPassword("property_test");
-
-    static {
-        postgres.start();
-    }
-
-    @DynamicPropertySource
-    static void databaseProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-        registry.add("spring.sql.init.mode", () -> "never");
-        registry.add("spring.jpa.defer-datasource-initialization", () -> "false");
-    }
+class ReportedBugsIntegrationTest extends AbstractPostgisIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -91,25 +60,25 @@ class ReportedBugsIntegrationTest {
 
     private String adminToken;
     private String buyerToken;
-    private String sellerToken;
+    private String secondAgentToken;
     private String realtorToken;
 
     @BeforeAll
     void authenticateSeededUsers() throws Exception {
         adminToken = login("admin@propertyapp.com", "Admin@123");
         buyerToken = login("buyer@propertyapp.com", "Demo@123");
-        sellerToken = login("seller@propertyapp.com", "Demo@123");
+        secondAgentToken = login("realtor2@propertyapp.com", "Demo@123");
         realtorToken = login("realtor@propertyapp.com", "Demo@123");
     }
 
     @Test
     void notificationContractsAreAuthenticatedAndReturnEmptySuccessResponses() throws Exception {
         mockMvc.perform(get("/api/notifications"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/notifications/unread-count")
                         .header("Authorization", "Bearer invalid-token"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/notifications").header("Authorization", bearer(buyerToken)))
                 .andExpect(status().isOk())
@@ -125,7 +94,7 @@ class ReportedBugsIntegrationTest {
     void buyerCanLoadAndConnectToRealtorProfileEndToEnd() throws Exception {
         User realtor = userRepository.findByEmailAndDeletedAtIsNull("realtor@propertyapp.com").orElseThrow();
         User buyer = userRepository.findByEmailAndDeletedAtIsNull("buyer@propertyapp.com").orElseThrow();
-        User seller = userRepository.findByEmailAndDeletedAtIsNull("seller@propertyapp.com").orElseThrow();
+        User seller = userRepository.findByEmailAndDeletedAtIsNull("realtor2@propertyapp.com").orElseThrow();
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
         MvcResult createdResult = mockMvc.perform(post("/api/properties")
@@ -139,11 +108,14 @@ class ReportedBugsIntegrationTest {
         mockMvc.perform(patch("/api/properties/{id}/publish", realtorPropertyId)
                         .header("Authorization", bearer(realtorToken)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+                .andExpect(jsonPath("$.data.status").value("PENDING_APPROVAL"));
+        mockMvc.perform(post("/api/admin/properties/{id}/approve", realtorPropertyId)
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk());
         Property realtorProperty = propertyRepository.findById(realtorPropertyId).orElseThrow();
 
         mockMvc.perform(get("/api/realtors/{id}", realtor.getId()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/realtors/{id}", realtor.getId())
                         .header("Authorization", bearer(buyerToken)))
@@ -189,7 +161,7 @@ class ReportedBugsIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/realtors/{id}/connect", realtor.getId())
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isForbidden());
@@ -219,11 +191,15 @@ class ReportedBugsIntegrationTest {
                         .content("{\"dateOfBirth\":\"not-a-date\"}"))
                 .andExpect(status().isBadRequest());
 
+        // Phone changes only through the OTP flow: a phone sent to PUT /me is ignored, not stored.
+        String phoneBefore = userRepository.findByEmailAndDeletedAtIsNull("buyer@propertyapp.com").orElseThrow().getPhone();
         mockMvc.perform(put("/api/users/me")
                         .header("Authorization", bearer(buyerToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"123456789012345678901\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
+        assertThat(userRepository.findByEmailAndDeletedAtIsNull("buyer@propertyapp.com").orElseThrow().getPhone())
+                .isEqualTo(phoneBefore);
     }
 
     @Test
@@ -519,7 +495,7 @@ class ReportedBugsIntegrationTest {
 
         // WITHOUT localityId — free-text address is accepted; property created in DRAFT
         MvcResult noLocalityResult = mockMvc.perform(post("/api/properties")
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(propertyPayload(typeId, null, "Without locality")))
                 .andExpect(status().isCreated())
@@ -537,7 +513,7 @@ class ReportedBugsIntegrationTest {
     void inquiryCreateAndReceivedFlowPersistsAndReturnsOwnersData() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Inquiry target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Inquiry target");
         long propertyId = property.at("/data/id").asLong();
 
         mockMvc.perform(post("/api/inquiries")
@@ -552,7 +528,7 @@ class ReportedBugsIntegrationTest {
         assertThat(inquiryRepository.count()).isGreaterThan(0);
         long inquiryCountAfterCreate = inquiryRepository.count();
         mockMvc.perform(get("/api/inquiries/received")
-                        .header("Authorization", bearer(sellerToken)))
+                        .header("Authorization", bearer(secondAgentToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[*].propertyId", hasItem((int) propertyId)));
 
@@ -572,11 +548,11 @@ class ReportedBugsIntegrationTest {
         long propertyId = property.at("/data/id").asLong();
 
         mockMvc.perform(get("/api/admin/properties").param("status", "ALL"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/properties")
                         .param("status", "ALL")
                         .header("Authorization", "Bearer invalid-token"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/properties")
                         .param("status", "ALL")
                         .header("Authorization", bearer(buyerToken)))
@@ -619,15 +595,28 @@ class ReportedBugsIntegrationTest {
 
     @Test
     void favoritesAreBuyerOnlyAndPersistForBuyer() throws Exception {
-        long propertyId = propertyRepository.findAll().getFirst().getId();
+        // Only listings the public may see can be saved (ADR-0006 Amendment 1): an agent's ACTIVE one.
+        long propertyId = propertyRepository.saveAndFlush(com.propertyapp.entity.property.Property.builder()
+                .title("Favorite target " + java.util.UUID.randomUUID())
+                .owner(userRepository.findByEmailAndDeletedAtIsNull("realtor@propertyapp.com").orElseThrow())
+                .propertyType(propertyTypeRepository.findAll().getFirst())
+                .listingType("SALE")
+                .price(java.math.BigDecimal.valueOf(400_000))
+                .addressLine1("2 Test St")
+                .city("Austin")
+                .state("Texas")
+                .country("USA")
+                .status("ACTIVE")
+                .viewCount(0)
+                .build()).getId();
 
         mockMvc.perform(post("/api/favorites/{propertyId}", propertyId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/favorites/{propertyId}", propertyId)
                         .header("Authorization", "Bearer invalid-token"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/favorites/{propertyId}", propertyId)
-                        .header("Authorization", bearer(sellerToken)))
+                        .header("Authorization", bearer(secondAgentToken)))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/favorites/{propertyId}", propertyId)
                         .header("Authorization", bearer(adminToken)))
@@ -700,7 +689,7 @@ class ReportedBugsIntegrationTest {
         mockMvc.perform(put("/api/users/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateJson))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     /**
@@ -712,9 +701,9 @@ class ReportedBugsIntegrationTest {
     void getUsersWithRoleFilterReturnOnlyMatchingRoleUsers() throws Exception {
         // Unauthenticated request must be rejected
         mockMvc.perform(get("/api/users"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
-        // Without role param — at least admin + buyer + seller + realtor are seeded
+        // Without role param — at least admin, buyer and two agents are seeded
         mockMvc.perform(get("/api/users")
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
@@ -752,9 +741,18 @@ class ReportedBugsIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    /** Inquiries and contact reveal need a live listing (ADR-0006). */
+    private JsonNode createActiveProperty(long typeId, long localityId, String title) throws Exception {
+        JsonNode property = createProperty(typeId, localityId, title);
+        Property entity = propertyRepository.findById(property.at("/data/id").asLong()).orElseThrow();
+        entity.setStatus("ACTIVE");
+        propertyRepository.saveAndFlush(entity);
+        return property;
+    }
+
     private JsonNode createProperty(long typeId, long localityId, String title) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/properties")
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(propertyPayload(typeId, localityId, title)))
                 .andExpect(status().isCreated())
@@ -791,7 +789,7 @@ class ReportedBugsIntegrationTest {
     void postingInquiryIncrementsPropertyInquiryCountVisibleOnMyListings() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "InquiryCount target");
+        JsonNode property = createActiveProperty(typeId, localityId, "InquiryCount target");
         long propertyId = property.at("/data/id").asLong();
 
         // Before any inquiry — inquiryCount must be 0
@@ -814,9 +812,9 @@ class ReportedBugsIntegrationTest {
                 propertyRepository.findById(propertyId).orElseThrow();
         assertThat(afterInquiry.getInquiryCount()).isEqualTo(1);
 
-        // Seller sees inquiryCount = 1 on GET /api/properties/my-listings
+        // The agent sees inquiryCount = 1 on GET /api/properties/my-listings
         mockMvc.perform(get("/api/properties/my-listings")
-                        .header("Authorization", bearer(sellerToken)))
+                        .header("Authorization", bearer(secondAgentToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(
                         "$.data.content[?(@.id == %d)].inquiryCount".formatted(propertyId),
@@ -829,21 +827,21 @@ class ReportedBugsIntegrationTest {
     void selfInquiryOnOwnListingIsRejected() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Self Inquiry Guard Target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Self Inquiry Guard Target");
         long propertyId = property.at("/data/id").asLong();
 
-        // The seller who OWNS this listing tries to inquire on it themselves.
+        // The agent who OWNS this listing tries to inquire on it themselves.
         mockMvc.perform(post("/api/inquiries")
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"propertyId":%d,"name":"Seller","email":"seller@propertyapp.com","message":"Can I inquire on my own listing?"}
+                                {"propertyId":%d,"name":"Agent Two","email":"realtor2@propertyapp.com","message":"Can I inquire on my own listing?"}
                                 """.formatted(propertyId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
 
         assertThat(inquiryRepository.findSentByInquirerId(
-                userRepository.findByEmailAndDeletedAtIsNull("seller@propertyapp.com").orElseThrow().getId(),
+                userRepository.findByEmailAndDeletedAtIsNull("realtor2@propertyapp.com").orElseThrow().getId(),
                 org.springframework.data.domain.PageRequest.of(0, 20)).getTotalElements())
                 .isZero();
     }
@@ -856,14 +854,14 @@ class ReportedBugsIntegrationTest {
     void buyerCanRevealContactOnAnotherOwnersListing() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Reveal Contact Buyer Target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Reveal Contact Buyer Target");
         long propertyId = property.at("/data/id").asLong();
 
         mockMvc.perform(post("/api/properties/{id}/reveal-contact", propertyId)
                         .header("Authorization", bearer(buyerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.alreadyContacted").value(false))
-                .andExpect(jsonPath("$.data.email").value("seller@propertyapp.com"));
+                .andExpect(jsonPath("$.data.email").value("realtor2@propertyapp.com"));
 
         assertThat(propertyRepository.findById(propertyId).orElseThrow().getContactCount()).isEqualTo(1);
     }
@@ -872,28 +870,16 @@ class ReportedBugsIntegrationTest {
     void realtorCanRevealContactOnAnotherOwnersListing() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Reveal Contact Realtor Target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Reveal Contact Realtor Target");
         long propertyId = property.at("/data/id").asLong();
 
         mockMvc.perform(post("/api/properties/{id}/reveal-contact", propertyId)
                         .header("Authorization", bearer(realtorToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.alreadyContacted").value(false))
-                .andExpect(jsonPath("$.data.email").value("seller@propertyapp.com"));
+                .andExpect(jsonPath("$.data.email").value("realtor2@propertyapp.com"));
 
         assertThat(propertyRepository.findById(propertyId).orElseThrow().getContactCount()).isEqualTo(1);
-    }
-
-    @Test
-    void sellerCannotRevealContact() throws Exception {
-        long typeId = propertyTypeRepository.findAll().getFirst().getId();
-        long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Reveal Contact Seller Forbidden Target");
-        long propertyId = property.at("/data/id").asLong();
-
-        mockMvc.perform(post("/api/properties/{id}/reveal-contact", propertyId)
-                        .header("Authorization", bearer(sellerToken)))
-                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -908,6 +894,9 @@ class ReportedBugsIntegrationTest {
                 .andReturn();
         long propertyId = objectMapper.readTree(createResult.getResponse().getContentAsString())
                 .at("/data/id").asLong();
+        Property ownListing = propertyRepository.findById(propertyId).orElseThrow();
+        ownListing.setStatus("ACTIVE");
+        propertyRepository.saveAndFlush(ownListing);
 
         mockMvc.perform(post("/api/properties/{id}/reveal-contact", propertyId)
                         .header("Authorization", bearer(realtorToken)))
@@ -921,9 +910,9 @@ class ReportedBugsIntegrationTest {
     void inquiryLifecycleNotifiesOwnerTransitionsStatusAndNotifiesBuyer() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Inquiry Lifecycle Target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Inquiry Lifecycle Target");
         long propertyId = property.at("/data/id").asLong();
-        long sellerId = userRepository.findByEmailAndDeletedAtIsNull("seller@propertyapp.com").orElseThrow().getId();
+        long sellerId = userRepository.findByEmailAndDeletedAtIsNull("realtor2@propertyapp.com").orElseThrow().getId();
         long buyerId = userRepository.findByEmailAndDeletedAtIsNull("buyer@propertyapp.com").orElseThrow().getId();
 
         MvcResult createResult = mockMvc.perform(post("/api/inquiries")
@@ -945,7 +934,7 @@ class ReportedBugsIntegrationTest {
 
         // Owner sees it under /received.
         mockMvc.perform(get("/api/inquiries/received")
-                        .header("Authorization", bearer(sellerToken)))
+                        .header("Authorization", bearer(secondAgentToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[?(@.id == %d)]".formatted(inquiryId)).exists());
 
@@ -957,7 +946,7 @@ class ReportedBugsIntegrationTest {
 
         // Owner transitions NEW -> CONTACTED.
         mockMvc.perform(patch("/api/inquiries/{id}/status", inquiryId)
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .param("status", "CONTACTED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CONTACTED"));
@@ -973,7 +962,7 @@ class ReportedBugsIntegrationTest {
     void invalidInquiryStatusTransitionIsRejected() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Invalid Transition Target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Invalid Transition Target");
         long propertyId = property.at("/data/id").asLong();
 
         MvcResult createResult = mockMvc.perform(post("/api/inquiries")
@@ -988,7 +977,7 @@ class ReportedBugsIntegrationTest {
 
         // NEW -> CLOSED directly (skipping CONTACTED) is not an allowed transition.
         mockMvc.perform(patch("/api/inquiries/{id}/status", inquiryId)
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .param("status", "CLOSED"))
                 .andExpect(status().isBadRequest());
 
@@ -1000,7 +989,7 @@ class ReportedBugsIntegrationTest {
     void nonOwnerCannotUpdateInquiryStatusOnSomeoneElsesProperty() throws Exception {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
-        JsonNode property = createProperty(typeId, localityId, "Ownership Guard Target");
+        JsonNode property = createActiveProperty(typeId, localityId, "Ownership Guard Target");
         long propertyId = property.at("/data/id").asLong();
 
         MvcResult createResult = mockMvc.perform(post("/api/inquiries")
@@ -1013,7 +1002,7 @@ class ReportedBugsIntegrationTest {
                 .andReturn();
         long inquiryId = objectMapper.readTree(createResult.getResponse().getContentAsString()).at("/data/id").asLong();
 
-        // realtorToken does not own this property (sellerToken does) — must be rejected.
+        // realtorToken does not own this property (secondAgentToken does) — must be rejected.
         mockMvc.perform(patch("/api/inquiries/{id}/status", inquiryId)
                         .header("Authorization", bearer(realtorToken))
                         .param("status", "CONTACTED"))
@@ -1028,7 +1017,7 @@ class ReportedBugsIntegrationTest {
         long typeId = propertyTypeRepository.findAll().getFirst().getId();
         long localityId = localityRepository.findAll().getFirst().getId();
 
-        JsonNode sellerProperty = createProperty(typeId, localityId, "Scoping Target Seller");
+        JsonNode sellerProperty = createActiveProperty(typeId, localityId, "Scoping Target Seller");
         long sellerPropertyId = sellerProperty.at("/data/id").asLong();
 
         MvcResult realtorPropertyResult = mockMvc.perform(post("/api/properties")
@@ -1048,6 +1037,10 @@ class ReportedBugsIntegrationTest {
                         """.formatted(sellerPropertyId)))
                 .andExpect(status().isOk());
 
+        Property realtorListing = propertyRepository.findById(realtorPropertyId).orElseThrow();
+        realtorListing.setStatus("ACTIVE");
+        propertyRepository.saveAndFlush(realtorListing);
+
         mockMvc.perform(post("/api/inquiries")
                 .header("Authorization", bearer(buyerToken))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -1056,9 +1049,9 @@ class ReportedBugsIntegrationTest {
                         """.formatted(realtorPropertyId)))
                 .andExpect(status().isOk());
 
-        // Seller's /received only shows the inquiry on their own property.
+        // The second agent's /received only shows the inquiry on their own property.
         mockMvc.perform(get("/api/inquiries/received")
-                        .header("Authorization", bearer(sellerToken)))
+                        .header("Authorization", bearer(secondAgentToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[*].propertyId", hasItem(Long.valueOf(sellerPropertyId).intValue())))
                 .andExpect(jsonPath("$.data.content[*].propertyId", not(hasItem(Long.valueOf(realtorPropertyId).intValue()))));
@@ -1092,7 +1085,7 @@ class ReportedBugsIntegrationTest {
 
         // First submission succeeds.
         mockMvc.perform(post("/api/properties")
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
@@ -1100,7 +1093,7 @@ class ReportedBugsIntegrationTest {
         // A second, near-simultaneous submission with the identical title from the same
         // owner is rejected as a duplicate rather than creating a second row.
         mockMvc.perform(post("/api/properties")
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isConflict())
@@ -1119,7 +1112,7 @@ class ReportedBugsIntegrationTest {
         String sharedTitle = "Shared Title Across Owners " + UUID.randomUUID();
 
         mockMvc.perform(post("/api/properties")
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(propertyPayloadWithExactTitle(typeId, localityId, sharedTitle)))
                 .andExpect(status().isCreated());
@@ -1148,10 +1141,10 @@ class ReportedBugsIntegrationTest {
         long propertyId = property.at("/data/id").asLong();
 
         MvcResult primaryResult = mockMvc.perform(post("/api/properties/{id}/images", propertyId)
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"imageUrl":"http://example.com/primary.jpg","isPrimary":true}
+                                {"imageUrl":"https://img.example/primary.jpg","isPrimary":true}
                                 """))
                 .andExpect(status().isCreated())
                 .andReturn();
@@ -1159,15 +1152,15 @@ class ReportedBugsIntegrationTest {
                 .at("/data/id").asLong();
 
         mockMvc.perform(post("/api/properties/{id}/images", propertyId)
-                        .header("Authorization", bearer(sellerToken))
+                        .header("Authorization", bearer(secondAgentToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"imageUrl":"http://example.com/secondary.jpg","isPrimary":false}
+                                {"imageUrl":"https://img.example/secondary.jpg","isPrimary":false}
                                 """))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/properties/{id}/images", propertyId)
-                        .header("Authorization", bearer(sellerToken)))
+                        .header("Authorization", bearer(secondAgentToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[?(@.id == %d)].isPrimary".formatted(primaryImageId), hasItem(true)))
                 .andExpect(jsonPath("$.data[?(@.id != %d)].isPrimary".formatted(primaryImageId), hasItem(false)));
