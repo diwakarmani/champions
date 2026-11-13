@@ -22,7 +22,7 @@ services:
       #   ADMIN_EMAIL  = <your admin email>
       #   ADMIN_PASSWORD = <your admin password>
       #   APP_BASE_URL = https://<your-render-service>.onrender.com
-      #   CORS_ALLOWED_ORIGINS = *
+      #   CORS_ALLOWED_ORIGINS = https://<your-web-origin>   (not *; the app refuses to start with *)
       #   CORS_ALLOW_CREDENTIALS = false
       #   HEALTH_MAIL_ENABLED = false
       #   TWILIO_ENABLED = false
@@ -32,8 +32,9 @@ services:
         value: prod
       - key: DDL_AUTO
         value: none
+      # ProductionConfigGuard refuses "*": list the real origins.
       - key: CORS_ALLOWED_ORIGINS
-        value: "*"
+        value: "https://champions-3qkd.onrender.com,http://localhost:3000,http://localhost:8081,http://localhost:19006"
       - key: CORS_ALLOW_CREDENTIALS
         value: "false"
       - key: HEALTH_MAIL_ENABLED
