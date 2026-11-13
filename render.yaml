@@ -14,8 +14,8 @@ services:
       #   Dashboard → Service → Environment → Add Environment Variable
       #
       # Required env vars for manual service:
-      #   DATABASE_URL = jdbc:postgresql://<host>.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0
-      #   DB_USERNAME  = postgres.<your-project-ref>
+      #   DATABASE_URL = jdbc:postgresql://aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0
+      #   DB_USERNAME  = postgres.gzkgmwihcbzzryvszucj   (Supabase project champions-us-west, Oregon)
       #   DB_PASSWORD  = <your supabase password>
       #   DDL_AUTO     = none
       #   JWT_SECRET   = <any long random string>
@@ -53,7 +53,8 @@ services:
       # ── Database — set in Render dashboard (sync: false) so the Supabase
       # project ref + host stay out of version control. Use the connection
       # pooler (port 6543) — required on Render (IPv4 + pooling). Format:
-      #   jdbc:postgresql://<host>.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0
+      #   jdbc:postgresql://aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0
+      # Keep the database in the same region as this service (Oregon / us-west-2).
       - key: DATABASE_URL
         sync: false
       - key: DB_USERNAME
